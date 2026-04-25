@@ -216,9 +216,11 @@ else
 fi
 
 # R35.2: No exposed API keys in repo (git secrets scan)
+# Excludes: placeholder strings, regex character-class patterns (e.g. sk-ant-api03-[A-Za-z0-9]),
+# gitignored local settings, this test file itself, and grep invocations referencing key shapes.
 EXPOSED=$(grep -rn "sk-ant-\|sk-or-v1-\|sk-proj-\|ghp_\|AIzaSy" "$REPO_ROOT" \
   --include="*.md" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.sh" \
-  2>/dev/null | grep -v "REPLACE_WITH\|example\|placeholder\|sk-ant-\.\.\.\|verify-production\.sh\|grep -c\|grep -rn" | head -5)
+  2>/dev/null | grep -v "REPLACE_WITH\|example\|placeholder\|sk-ant-\.\.\.\|verify-production\.sh\|grep -c\|grep -rn\|\[A-Za-z0-9\]\|\[a-f0-9\]\|\[0-9\]\|settings\.local\.json" | head -5)
 if [ -z "$EXPOSED" ]; then
   pass "R35.2: No exposed API keys in repo files"
 else
