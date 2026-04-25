@@ -82,6 +82,9 @@ Update shared memory (Supermemory + state files):
 
 - `skills/centaurion-core/` — Identity loading, core loop
 - `skills/routing-gate/` — Prediction error classification
+- `skills/thinking-modes/` — 7 cognitive modes (First Principles, Red Team, Council, Premortem, Inversion, Wardley, OODA)
+- `skills/prd-tracking/` — Product Requirements Documents for every non-trivial task
+- `skills/security-assessment/` — Authorized security testing, infrastructure audits, secret rotation
 - `skills/weekly-review/` — L2 structured weekly comparison
 - `skills/sa-scan/` — Situational Awareness stock scanning
 - `skills/gap-analysis/` — InfraNodus knowledge gap analysis
