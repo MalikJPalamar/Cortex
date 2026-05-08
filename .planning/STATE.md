@@ -4,8 +4,11 @@
 Phase 7: Production Deployment (requires real system access)
 
 ## Current Status
-Phases 1-6 COMPLETE (271/271 all green — structure, content, coherence verified).
-Phase 7 tests verify real deployment — 12 failures requiring actual systems.
+Phases 1-6, 8, 10 COMPLETE. Suite at 325/327 (≥99%) as of 2026-05-08.
+Phase 7 has 1 real failing check (R32.4 — NanoClaw agent image not built).
+The other Phase 7 "fail" line is the suite's summary line being grep-counted as a ✗.
+R32.4 cannot be auto-fixed by the dev loop: `docker build` is not in the auto-approve
+allowlist, and adding it without operator review would expand the agent's privilege.
 Dev loop runs 3x daily (6am, 2pm, 10pm CET) on VPS1 via Max subscription.
 
 ## Decisions Log
@@ -25,7 +28,7 @@ Dev loop runs 3x daily (6am, 2pm, 10pm CET) on VPS1 via Max subscription.
 
 | Item | What's Needed | Priority |
 |------|--------------|----------|
-| **R32: NanoClaw/Nova** | Reconfigure NanoClaw to use free model (Qwen/MiniMax), restart container, deploy SOUL.md | High |
+| **R32.4: NanoClaw agent image** | Run `/root/nanoclaw/container/build.sh` on VPS1. Orchestrator is up, `.env` + SOUL.md are already deployed; only the Docker image is missing. The dev loop cannot self-approve `docker build`, so this is the one remaining manual step. | High |
 | **R34.1: Supermemory** | Sign up for Supermemory, get API key, replace placeholder in memory/supermemory.json | Medium |
 | **R34.3: Real ratings** | Rate one real task output (not dev loop self-rating) | Low |
 | **R35.3: Git history** | API keys exposed in history from earlier session — needs BFG repo cleaner | Medium |
