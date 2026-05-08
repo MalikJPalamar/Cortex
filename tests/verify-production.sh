@@ -105,11 +105,29 @@ if [ -n "$NANOCLAW_ENV" ]; then
   fi
 fi
 
-# R32.4: NanoClaw Docker container is running
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -qi "nanoclaw\|claw"; then
-  pass "R32.4: NanoClaw container is running"
+# R32.4: NanoClaw orchestrator is live and able to spawn agent containers.
+# Architecture (see /root/nanoclaw/CLAUDE.md): a single Node.js daemon
+# (systemd unit `nanoclaw.service`) connects to WhatsApp/Telegram and
+# spawns *ephemeral* Docker containers per message — they exit on `--rm`.
+# So `docker ps` will normally show no nanoclaw container, even when fully
+# operational. The correct liveness signal is: orchestrator process up AND
+# agent image built so spawn-on-demand actually works.
+ORCH_LIVE=0
+if pgrep -f "nanoclaw/dist/index.js" >/dev/null 2>&1; then
+  ORCH_LIVE=1
+fi
+IMAGE_READY=0
+if docker images --format '{{.Repository}}' 2>/dev/null | grep -qi "nanoclaw-agent\|nanoclaw\|claw"; then
+  IMAGE_READY=1
+fi
+if [ "$ORCH_LIVE" = "1" ] && [ "$IMAGE_READY" = "1" ]; then
+  pass "R32.4: NanoClaw orchestrator running + agent image built (ready to spawn)"
+elif [ "$ORCH_LIVE" = "1" ]; then
+  fail "R32.4: Orchestrator running but agent image missing — run /root/nanoclaw/container/build.sh"
+elif [ "$IMAGE_READY" = "1" ]; then
+  fail "R32.4: Agent image built but orchestrator not running — systemctl start nanoclaw"
 else
-  fail "R32.4: NanoClaw container not running"
+  fail "R32.4: NanoClaw orchestrator not running and agent image not built"
 fi
 
 # R32.5: SOUL.md deployed matches repo's Nova personality

@@ -7,6 +7,7 @@ Knowledge base for the Art of Breath venture. AOB delivers breathwork education 
 | Page | Description |
 |------|-------------|
 | [CRM Migration](crm-migration.md) | Ontraport → GoHighLevel migration plan and status |
+| [CRM Migration — Wardley Map](crm-migration-wardley.md) | Strategic value-chain map: build vs buy decisions for the migration |
 | [Team](team.md) | Team structure, roles, and capacity |
 | [Facilitator Certification](facilitator-certification.md) | Certification program structure and pipeline |
 | [Tech Stack](tech-stack.md) | Systems, tools, and integrations |

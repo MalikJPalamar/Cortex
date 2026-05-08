@@ -4,6 +4,8 @@
 
 AOB is migrating its CRM from Ontraport to GoHighLevel (GHL) to consolidate tools, reduce costs, and unlock automation capabilities that Ontraport cannot support.
 
+> **See also:** [CRM Migration — Wardley Map](crm-migration-wardley.md) for the strategic build/buy decisions framing this migration. Linked PRD: `memory/state/work/aob-crm-migration-omega-20260425/PRD.md`.
+
 ## Why Migrate
 
 - **Cost:** Ontraport pricing scales poorly with contact volume
