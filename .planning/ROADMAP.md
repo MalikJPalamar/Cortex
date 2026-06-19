@@ -94,8 +94,8 @@
 - [ ] **PT-5 Real ai-operations / cicd-pipelines / settings** 🤖. Map ai-operations ←
   routing-log+dev-loop runs; cicd/pipelines ← GitHub Actions API; settings ← real config;
   drop/wire market. **Done when:** no endpoint returns mock fixtures.
-- [ ] **PT-6 Kill Render cold-starts** 🤖/👤. Keep-warm cron on `/api/health` (~10 min) or
-  paid tier. **Done when:** first-load < 2s consistently.
+- [x] **PT-6 Kill Render cold-starts** 🤖/👤. Keep-warm cron on `/api/health` (~10 min) or
+  paid tier. **Done when:** first-load < 2s consistently. (keep-warm.yml, every 13 min)
 
 ### P3 — Phase 9 infra remainder
 - [ ] **PT-7** Syncthing (VPS1↔VPS2 wiki sync), InfraNodus MCP (gap analysis),
