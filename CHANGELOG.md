@@ -2,6 +2,13 @@
 
 All changes to the Centaurion exo-cortex, with real dates and deliverables.
 
+## CI/CD Hardening + Phase 9 start (2026-06-19)
+- **CI/CD pipeline** now validates the deployed app (root Dockerfile = React/Vite + FastAPI), enforces a real security gate (bandit blocking on our code, safety advisory), and added a first pytest suite. Build job repointed off the non-deployed legacy server; live at centaurion.onrender.com. (PR #62)
+- **`.github/workflows/ci.yml`**: new `framework-verify` job runs the phase verification suite (`tests/run-all.sh`) on every push/PR — GitHub CI now checks ~309 framework invariants, not just smoke tests. Blocks `build`.
+- **`tests/run-all.sh`**: auto-skips Phase 7 (live VPS1 host) when `CI=true`.
+- **`tests/verify-core-loop.sh`**: R10.1/R10.2 now skip intentionally gitignored per-operator files (onboarding-state.json, BASELINE-*.md) — fixes CI false-positives while still validating real broken references.
+- **Phase 9:** `.github/workflows/daily-health.yml` created — scheduled daily GitHub Issue with framework-suite status, last VPS health snapshot, dev-loop status, wiki freshness, and routing recency (satisfies the "gh-aw workflow creating issues" Definition-of-Done item).
+
 ## Phase 8 — Operational Automation (2026-04-16)
 - **deploy/vps1/centaurion-dev-loop.sh** rewritten: lock file prevents concurrent runs, log rotation (14 days), execution metrics, dev-loop-status.json output
 - **deploy/vps1/weekly-review.sh** created: L2 sensing runner, uses `claude -p`, generates structured weekly comparison, cron-installable (Mondays 7am CET)
