@@ -20,6 +20,12 @@ R32.x now detects either topology. On the container host Phase 7 = **15/17**:
 
 Dev loop runs 3x daily on VPS1 via Max subscription (proven by daily auto-commits).
 
+**Production dashboard is now REAL (2026-06-19):** centaurion.onrender.com serves live
+state — `/api/dashboard/stats`, `/api/status/live`, `/api/cicd/health` read the committed
+routing-log/ratings/dev-loop snapshot baked into the image (PRs #70, #73, #74). Verified
+non-zero in production. Next production targets lined up in ROADMAP.md → "Next Production
+Targets" (P0 key rotation → P1 Nova-Telegram + live UI → P2 retire mocks → P3 infra).
+
 ## Decisions Log
 
 | Date | Decision | Rationale |
@@ -38,7 +44,7 @@ Dev loop runs 3x daily on VPS1 via Max subscription (proven by daily auto-commit
 | Item | What's Needed | Priority |
 |------|--------------|----------|
 | **R31.2 / R31.3: dev-loop on VPS1** | The dev-loop cron + logs live on VPS1 (`187.124.45.132`), not this container host (`srv1514399`). Verify-production flags them as "not on this host"; not a real outage (daily auto-commits prove the loop runs). Run the suite on VPS1, or split host-specific checks. | Low |
-| **R35.3: Git history (deep)** | The last-20-commit scan is clean, but earlier history may still carry exposed keys — needs `git-filter-repo`/BFG + force-push + key rotation. Deferred pending explicit go-ahead. | Medium |
+| **PT-1: Rotate exposed keys (was R35.3)** | CORRECTED 2026-06-19: 3-agent audit found git history CLEAN — **no BFG/force-push needed**. The real action is rotation: Anthropic (leaked in Hermes logs, now scrubbed), GitHub PAT, Render (committed key now removed from HEAD), OpenRouter, Supermemory, + 2nd pass. 👤 revokes/reissues at dashboards; 🤖 updates host `.env`/container. See ROADMAP "Next Production Targets" PT-1. | High |
 | ~~R32.5: Nova SOUL~~ | RESOLVED 2026-06-19 — Nova soul deployed to the live OpenClaw container workspace (runtime line corrected to srv1514399; generic template backed up). | ✓ |
 | ~~R32.4: NanoClaw agent image~~ | RESOLVED — deployment is the long-lived OpenClaw container, not a spawn-on-demand image. R32.x reconciled. | ✓ |
 | ~~R34.1 / R34.3~~ | RESOLVED on host — real Supermemory key + a real task rating present. | ✓ |

@@ -60,6 +60,48 @@
 - [ ] MemPalace installed — Claude conversation exports mined
 
 **Definition of Done:** Agent answers "When did we decide to migrate from Ontraport?" from Graphiti.
+**Status note (2026-06-19):** Neo4j IS deployed (container `neo4j:5` live on srv1514399, ports 7474/7687). Graphiti MCP + temporal tracking still pending.
+
+---
+
+## Next Production Targets (lined up 2026-06-19, post real-dashboard ship)
+
+> Context: the deployed dashboard now serves **real** state (`/api/dashboard/stats`,
+> `/api/status/live`, `/api/cicd/health`) — PRs #70/#73/#74. These are the next
+> production targets in priority order. Owner = who must act (🤖 Cortex can do
+> autonomously · 👤 needs Malik).
+
+### P0 — Security footing (👤+🤖)
+- [ ] **PT-1 Rotate exposed keys.** Audit (3 agents, 2026-06-19) found the git history
+  clean — no rewrite/BFG needed — but real keys must be rotated: Anthropic (leaked into
+  Hermes session logs, now scrubbed), GitHub PAT, Render (was committed), OpenRouter,
+  Supermemory; 2nd pass: NEXOS, Oxylabs, Browser-Use, Firecrawl, Honcho, 3× Telegram,
+  OpenClaw gateway, Neo4j pw. 👤 revokes+reissues at dashboards → 🤖 updates host
+  `.env`/container + restarts. **Done when:** old keys 401, services green on new keys.
+
+### P1 — Make the system "real" to a user
+- [ ] **PT-2 Verify Nova end-to-end via Telegram** (closes Phase 9 DoD). SOUL is deployed;
+  send a real Telegram message and confirm Nova replies in Centaurion sensing identity.
+  👤 sends / 🤖 inspects logs. **Done when:** a Telegram exchange shows Nova-as-Nova.
+- [ ] **PT-3 Surface live endpoints in the UI** 🤖. Frontend consumes only
+  `/api/dashboard/stats`; add a "System" panel wiring `/api/status/live` +
+  `/api/cicd/health` (phase, dev-loop, component health). **Done when:** dashboard shows a live system-status panel.
+- [ ] **PT-4 Live data, not a build-time snapshot** 🤖. Stats currently freeze at deploy.
+  Read fresh state (dev-loop-written volume, or pull from VPS/API) so it updates without
+  a redeploy. **Done when:** a new routing decision appears without rebuilding the image.
+
+### P2 — Retire mock surfaces & harden
+- [ ] **PT-5 Real ai-operations / cicd-pipelines / settings** 🤖. Map ai-operations ←
+  routing-log+dev-loop runs; cicd/pipelines ← GitHub Actions API; settings ← real config;
+  drop/wire market. **Done when:** no endpoint returns mock fixtures.
+- [ ] **PT-6 Kill Render cold-starts** 🤖/👤. Keep-warm cron on `/api/health` (~10 min) or
+  paid tier. **Done when:** first-load < 2s consistently.
+
+### P3 — Phase 9 infra remainder
+- [ ] **PT-7** Syncthing (VPS1↔VPS2 wiki sync), InfraNodus MCP (gap analysis),
+  wikis-as-separate-repos. **Done when:** Phase 9 DoD infra items met.
+
+**Sequencing:** PT-1 (clean footing) → PT-2/3/4 (system is real & live) → PT-5/6 (polish & reliability) → PT-7 (infra).
 
 ---
 
