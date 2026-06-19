@@ -1,0 +1,52 @@
+{
+  "service": "infranodus",
+  "description": "Layer 2b: Topology lens — knowledge-gap detection over the wiki repos via text-network analysis (clusters, structural holes, bridge concepts, research questions)",
+  "status": "scaffolded",
+  "activation": "pending-key",
+  "tier": "trial",
+  "apiKey": "${INFRANODUS_API_KEY}",
+  "apiKeySource": "env:INFRANODUS_API_KEY",
+  "apiKeyPath": "/root/Centaurion/.env (gitignored, 600 perms)",
+  "signup": "https://infranodus.com/api-access",
+  "auth": {
+    "scheme": "bearer",
+    "header": "Authorization: Bearer ${INFRANODUS_API_KEY}"
+  },
+  "endpoints": {
+    "baseUrl": "https://infranodus.com/api/v1/",
+    "graphAndStatements": "POST https://infranodus.com/api/v1/graphAndStatements",
+    "dotGraphFromText": "POST https://infranodus.com/api/v1/dotGraphFromText"
+  },
+  "responseShape": {
+    "gaps": "attributes.gaps — structural holes between topical clusters (candidate content / bridge questions)",
+    "graphSummary": "string — compact natural-language summary of the topology",
+    "extendedGraphSummary": "object — topical-cluster insights"
+  },
+  "params": {
+    "gapDepth": "0-3; 0 = most prominent gaps, 1-3 = progressively deeper/subtler structural holes"
+  },
+  "mcp": {
+    "package": "infranodus-mcp-server",
+    "configFile": "deploy/infranodus/mcp.json",
+    "envVar": "INFRANODUS_API_KEY",
+    "tools": [
+      "generate_knowledge_graph",
+      "generate_content_gaps",
+      "generate_topical_clusters",
+      "generate_research_questions",
+      "develop_conceptual_bridges",
+      "analyze_text"
+    ],
+    "notes": "Official MCP server. 30 tools total; the listed subset is what gap-analysis consumes. HTTP API (endpoints above) is the equivalent integration if MCP is not wired."
+  },
+  "consumers": {
+    "skill": "skills/gap-analysis/SKILL.md",
+    "targets": [
+      "docs/centaurion-wiki",
+      "MalikJPalamar/aob-wiki",
+      "MalikJPalamar/builderbee-wiki"
+    ]
+  },
+  "verifiedRoundTrip": false,
+  "notes": "Purpose: 'What are we NOT seeing?' Detects disconnected knowledge clusters and the bridge concepts that would connect them. SCAFFOLD ONLY — no live key present. Set INFRANODUS_API_KEY in the host .env to activate; see deploy/infranodus/README.md. Mirrors the documented-integration pattern of memory/supermemory.json."
+}

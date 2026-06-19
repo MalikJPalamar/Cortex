@@ -1,0 +1,12 @@
+{
+  "_comment": "InfraNodus MCP server for gap analysis (Phase 9 / PT-7). SCAFFOLD — needs INFRANODUS_API_KEY to activate. Merge this `mcpServers` entry into the host's Claude Code MCP config (e.g. ~/.claude.json or project .mcp.json). The key is read from the host environment, NOT hardcoded here. See deploy/infranodus/README.md.",
+  "mcpServers": {
+    "infranodus": {
+      "command": "npx",
+      "args": ["-y", "infranodus-mcp-server"],
+      "env": {
+        "INFRANODUS_API_KEY": "${INFRANODUS_API_KEY}"
+      }
+    }
+  }
+}
