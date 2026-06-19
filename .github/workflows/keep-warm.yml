@@ -1,0 +1,72 @@
+name: Keep Warm
+
+# PT-6 — Kill Render free-tier cold-starts.
+#
+# The deployed app sleeps after ~15 min of inactivity; the first request after a
+# sleep takes 20-50s while the container spins back up. This workflow pings the
+# health + live-data endpoints on a schedule so the service never idles long
+# enough to sleep, keeping first-load fast for real visitors.
+#
+# Cron runs every 13 minutes (under Render's ~15 min idle window). GitHub Actions
+# cron is best-effort and CAN be delayed by several minutes under load — that's
+# acceptable here; an occasional missed ping just means one cold start, not an
+# outage. A single cold-start timeout will NOT fail the job; we only fail if BOTH
+# endpoints are unreachable after retries.
+#
+# NOTE: If the Render service URL changes, update BASE_URL below.
+
+on:
+  schedule:
+    # Every 13 minutes — under Render's ~15 min idle threshold.
+    - cron: '*/13 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    env:
+      BASE_URL: https://centaurion.onrender.com
+    steps:
+      - name: Ping endpoints to keep the service warm
+        run: |
+          # Curl an endpoint with generous timeouts + retries (handles a cold
+          # start gracefully). Logs status + response. Returns 0 on success,
+          # 1 on failure — we decide job pass/fail from the combined result.
+          ping() {
+            local url="$1"
+            echo "→ Pinging $url"
+            local body status
+            # -f makes curl fail on HTTP >= 400; -s silent; -S show errors;
+            # --retry handles transient errors and the initial cold-start spin-up.
+            body=$(curl -fsS \
+              --max-time 60 \
+              --retry 3 \
+              --retry-delay 10 \
+              --retry-all-errors \
+              -w '\nHTTP_STATUS:%{http_code}' \
+              "$url") && status=0 || status=1
+            echo "$body"
+            if [ "$status" -eq 0 ]; then
+              echo "✅ $url reachable"
+            else
+              echo "❌ $url unreachable after retries"
+            fi
+            return "$status"
+          }
+
+          health_ok=0
+          live_ok=0
+          ping "$BASE_URL/api/health"      && health_ok=1 || true
+          # Second endpoint keeps the real-data path warm too.
+          ping "$BASE_URL/api/status/live" && live_ok=1   || true
+
+          # Only fail the job if BOTH endpoints are unreachable, so a single
+          # cold-start timeout doesn't spam failures.
+          if [ "$health_ok" -eq 0 ] && [ "$live_ok" -eq 0 ]; then
+            echo "Both endpoints unreachable — failing job."
+            exit 1
+          fi
+          echo "Keep-warm ping complete (health=$health_ok live=$live_ok)."

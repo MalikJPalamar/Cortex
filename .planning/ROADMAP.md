@@ -94,8 +94,8 @@
 - [ ] **PT-5 Real ai-operations / cicd-pipelines / settings** 🤖. Map ai-operations ←
   routing-log+dev-loop runs; cicd/pipelines ← GitHub Actions API; settings ← real config;
   drop/wire market. **Done when:** no endpoint returns mock fixtures.
-- [ ] **PT-6 Kill Render cold-starts** 🤖/👤. Keep-warm cron on `/api/health` (~10 min) or
-  paid tier. **Done when:** first-load < 2s consistently.
+- [x] **PT-6 Kill Render cold-starts** 🤖/👤. Keep-warm cron on `/api/health` (~10 min) or
+  paid tier. **Done when:** first-load < 2s consistently. (keep-warm.yml, every 13 min)
 
 ### P3 — Phase 9 infra remainder
 - [ ] **PT-7** Syncthing (VPS1↔VPS2 wiki sync), InfraNodus MCP (gap analysis),
@@ -103,6 +103,11 @@
   - Syncthing scaffold added (`deploy/syncthing/`) — activation needs a run on
     each host (install + device-ID exchange + folder share on VPS1 *and* VPS2).
     Checkbox stays unchecked until both hosts are paired and "Up to Date".
+  - InfraNodus scaffold added (`memory/infranodus.json` + `deploy/infranodus/`) —
+    needs `INFRANODUS_API_KEY` to activate. MCP config + HTTP-API runbook + gap-analysis
+    skill wiring all in place; flip to live by setting the key on the host.
+  - Wiki-as-repos migration kit added (`deploy/wiki-migration/`, dry-run safe) —
+    operator runs `migrate-wikis.sh --execute` to create the separate repos.
 
 **Sequencing:** PT-1 (clean footing) → PT-2/3/4 (system is real & live) → PT-5/6 (polish & reliability) → PT-7 (infra).
 

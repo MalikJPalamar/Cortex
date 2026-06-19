@@ -73,3 +73,60 @@ def test_cicd_health_is_live():
     assert "services" in data and isinstance(data["services"], list)
     names = {s["name"] for s in data["services"]}
     assert "Dev Loop" in names  # proves it's the live provider, not mock
+
+
+# The old mock fixture ids — their absence proves we serve real data now.
+_MOCK_OP_IDS = {"op-001", "op-002", "op-003", "op-004", "op-005"}
+_MOCK_PIPE_IDS = {"pipe-001", "pipe-002", "pipe-003", "pipe-004"}
+
+
+def test_ai_operations_are_live_not_mock():
+    resp = client.get("/api/ai-operations")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "operations" in data and isinstance(data["operations"], list)
+    assert data["total"] == len(data["operations"])
+    assert data["operations"], "live ops derive from routing log + dev loop"
+    for op in data["operations"]:
+        for key in ("id", "name", "type", "status", "created_at"):
+            assert key in op, f"operation missing {key}"
+    ids = {op["id"] for op in data["operations"]}
+    assert ids.isdisjoint(_MOCK_OP_IDS), "must not return old mock operation ids"
+    # The dev-loop run is surfaced as a real operation.
+    assert any(op["type"] == "dev_loop" for op in data["operations"])
+
+
+def test_cicd_pipelines_are_live_not_mock():
+    resp = client.get("/api/cicd/pipelines")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "pipelines" in data and isinstance(data["pipelines"], list)
+    assert data["total"] == len(data["pipelines"])
+    assert data["pipelines"], "live pipelines come from .github/workflows/*"
+    for p in data["pipelines"]:
+        for key in ("id", "name", "status", "branch"):
+            assert key in p, f"pipeline missing {key}"
+        assert p["branch"] == "main"
+        assert p["status"] == "configured"
+    ids = {p["id"] for p in data["pipelines"]}
+    assert ids.isdisjoint(_MOCK_PIPE_IDS), "must not return old mock pipeline ids"
+
+
+def test_settings_are_live_not_mock():
+    import json
+
+    resp = client.get("/api/settings")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, dict)
+    # Real config shape: identity + memory, not the old api_keys/notifications mock.
+    assert "identity" in data and "memory" in data
+    assert "api_keys" not in data, "must not return old mock settings shape"
+    assert data["identity"]["service"] == "Centaurion"
+    assert data["identity"]["version"] == "1.0.0"
+    assert data["memory"]["service"] == "supermemory"
+    # Never surface a raw secret value — only a boolean configured flag.
+    assert isinstance(data["memory"]["api_key_configured"], bool)
+    serialized = json.dumps(data)
+    assert "${" not in serialized, "no env-ref placeholders leaked"
+    assert "SUPERMEMORY_API_KEY" not in serialized

@@ -11,7 +11,7 @@ Analyze the three LLM Wiki repos (aob-wiki, builderbee-wiki, centaurion-wiki) fo
 
 ## Prerequisites
 
-- InfraNodus MCP server connected (or InfraNodus skill installed)
+- InfraNodus connected — MCP server **or** HTTP API (see **InfraNodus Integration** below). Needs `INFRANODUS_API_KEY` on the host; until then the integration is `scaffolded`/`pending-key` and you fall back to manual topology reasoning.
 - At least one wiki repo with content to analyze
 - Wiki repos: `MalikJPalamar/aob-wiki`, `MalikJPalamar/builderbee-wiki`, `MalikJPalamar/centaurion-wiki`
 
@@ -68,6 +68,35 @@ For each identified gap, generate a research question:
 ## Recommended Actions
 - [Specific wiki pages to create or update]
 ```
+
+## InfraNodus Integration
+
+InfraNodus is the engine for steps 2–4 above. It builds a text-network graph of
+the wiki and returns the *structural holes* (gaps) plus the bridge concepts and
+research questions that fill them. **Status: scaffolded — set `INFRANODUS_API_KEY`
+on the host to activate.** Full runbook: `deploy/infranodus/README.md`. Descriptor:
+`memory/infranodus.json`.
+
+**Two equivalent paths:**
+
+1. **MCP (preferred)** — config snippet in `deploy/infranodus/mcp.json`
+   (`infranodus-mcp-server` via npx). Once the key is set and the server is merged
+   into the host MCP config, call these tools on the wiki text:
+   - `generate_knowledge_graph` → build the graph
+   - `generate_topical_clusters` → name the clusters (step 2)
+   - `generate_content_gaps` → list structural holes (step 2)
+   - `develop_conceptual_bridges` → bridge concepts (step 2)
+   - `generate_research_questions` → turn gaps into questions (step 4)
+
+2. **HTTP API** — `POST https://infranodus.com/api/v1/dotGraphFromText` with
+   `Authorization: Bearer ${INFRANODUS_API_KEY}`, body `{name, text, gapDepth}`.
+   Read `.graphSummary` and `.attributes.gaps` from the response. `gapDepth` 0→3
+   walks from the most prominent gaps to subtler ones (re-run, raising it, to mine
+   the cross-wiki gaps in step 3). See the README for a copy-paste `curl`.
+
+**Invocation:** with the key set, run `/gap-analysis` (or "what are we missing?").
+Without the key, proceed with manual topology reasoning and flag that InfraNodus
+is `pending-key` in the output.
 
 ## Example
 
