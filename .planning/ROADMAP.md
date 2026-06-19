@@ -100,6 +100,9 @@
 ### P3 — Phase 9 infra remainder
 - [ ] **PT-7** Syncthing (VPS1↔VPS2 wiki sync), InfraNodus MCP (gap analysis),
   wikis-as-separate-repos. **Done when:** Phase 9 DoD infra items met.
+  - Syncthing scaffold added (`deploy/syncthing/`) — activation needs a run on
+    each host (install + device-ID exchange + folder share on VPS1 *and* VPS2).
+    Checkbox stays unchecked until both hosts are paired and "Up to Date".
 
 **Sequencing:** PT-1 (clean footing) → PT-2/3/4 (system is real & live) → PT-5/6 (polish & reliability) → PT-7 (infra).
 
