@@ -2,7 +2,7 @@
 # Render Deployment Script
 # Usage: ./deploy-render.sh [service-id]
 
-RENDER_API_KEY="${RENDER_API_KEY:-rnd_lgJ76TLYtIWKbzN3haAzEbg8ma0Z}"
+RENDER_API_KEY="${RENDER_API_KEY:?RENDER_API_KEY must be set in the environment (no hardcoded default)}"
 SERVICE_ID="${1:-}"
 
 if [ -z "$SERVICE_ID" ]; then
