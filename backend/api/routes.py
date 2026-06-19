@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from api.mock_data import (
-    get_dashboard_stats,
     get_ai_operations,
     create_ai_operation,
     get_operation_by_id,
@@ -8,9 +7,14 @@ from api.mock_data import (
     generate_report,
     get_pipelines,
     trigger_pipeline,
-    get_health_status,
     get_settings,
     update_settings
+)
+# Real Centaurion state (reads committed routing-log/ratings/dev-loop/workflows).
+from api.live_data import (
+    get_dashboard_stats,
+    get_health_status,
+    get_live_status,
 )
 
 router = APIRouter()
@@ -18,6 +22,10 @@ router = APIRouter()
 @router.get("/dashboard/stats")
 async def dashboard_stats():
     return get_dashboard_stats()
+
+@router.get("/status/live")
+async def status_live():
+    return get_live_status()
 
 @router.get("/ai-operations")
 async def list_ai_operations():
