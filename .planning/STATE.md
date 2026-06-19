@@ -11,12 +11,12 @@ Phase 7 reconciled to the real topology (2026-06-19): NanoClaw/Nova runs as the
 **containerized OpenClaw** deployment (`openclaw-…-openclaw-1`, image
 `ghcr.io/hostinger/hvps-openclaw`) on the container host `srv1514399` — NOT the
 `/root/nanoclaw` host install the tests originally assumed. `verify-production.sh`
-R32.x now detects either topology. On the container host Phase 7 = **14/17**:
-- R32.1–R32.4 ✓ (container live: orchestrator up, config + low-cost provider present)
+R32.x now detects either topology. On the container host Phase 7 = **15/17**:
+- R32.1–R32.5 ✓ (container live; Nova SOUL deployed to /data/.openclaw/workspace
+  on 2026-06-19, runtime line corrected to srv1514399; backup kept alongside it)
 - R34.1/R34.3/R35.3 ✓ (real Supermemory key, a real rating, clean recent history)
-- Remaining real gaps: R32.5 (Nova SOUL not deployed — container runs the generic
-  template), R31.2/R31.3 (dev-loop cron+logs live on VPS1 `187.124.45.132`, a
-  different machine than this container host).
+- Remaining real gaps: R31.2/R31.3 (dev-loop cron+logs live on VPS1
+  `187.124.45.132`, a different machine than this container host).
 
 Dev loop runs 3x daily on VPS1 via Max subscription (proven by daily auto-commits).
 
@@ -37,8 +37,9 @@ Dev loop runs 3x daily on VPS1 via Max subscription (proven by daily auto-commit
 
 | Item | What's Needed | Priority |
 |------|--------------|----------|
-| **R32.5: Nova SOUL not deployed** | The OpenClaw container runs the generic template `SOUL.md` at `/data/.openclaw/workspace/SOUL.md`, not Centaurion's Nova soul (`deploy/openclaw/SOUL.md`). Deploy Nova's SOUL into the container workspace to give the agent Centaurion identity. Mutates the live container — confirm before overwriting. | High |
+| **R31.2 / R31.3: dev-loop on VPS1** | The dev-loop cron + logs live on VPS1 (`187.124.45.132`), not this container host (`srv1514399`). Verify-production flags them as "not on this host"; not a real outage (daily auto-commits prove the loop runs). Run the suite on VPS1, or split host-specific checks. | Low |
 | **R35.3: Git history (deep)** | The last-20-commit scan is clean, but earlier history may still carry exposed keys — needs `git-filter-repo`/BFG + force-push + key rotation. Deferred pending explicit go-ahead. | Medium |
+| ~~R32.5: Nova SOUL~~ | RESOLVED 2026-06-19 — Nova soul deployed to the live OpenClaw container workspace (runtime line corrected to srv1514399; generic template backed up). | ✓ |
 | ~~R32.4: NanoClaw agent image~~ | RESOLVED — deployment is the long-lived OpenClaw container, not a spawn-on-demand image. R32.x reconciled. | ✓ |
 | ~~R34.1 / R34.3~~ | RESOLVED on host — real Supermemory key + a real task rating present. | ✓ |
 
