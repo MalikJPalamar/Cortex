@@ -45,7 +45,7 @@
 - [x] NanoClaw renamed from OpenClaw across deploy/
 - [ ] Syncthing between VPS1 and VPS2 (P2P wiki sync)
 - [ ] Nova actually scanning via Telegram (NanoClaw → Cortex routing)
-- [ ] gh-aw or equivalent scheduled issue creation for daily health
+- [x] gh-aw or equivalent scheduled issue creation for daily health (`.github/workflows/daily-health.yml`)
 - [ ] InfraNodus MCP for gap analysis (or equivalent)
 - [ ] Wiki repos as separate GitHub repos (not just docs/ subdirectories)
 

@@ -1,0 +1,168 @@
+name: Daily Health Check
+
+# Phase 9 (Real Integrations) — "gh-aw or equivalent scheduled issue creation for
+# daily health". L3 sensing: produces a phone-readable GitHub Issue each morning.
+#
+# This is the GitHub-Actions-native counterpart to deploy/vps1/health-check.sh.
+# Live-host signals (Docker, NanoClaw, Telegram, Supermemory tokens) come from the
+# last health-status.json snapshot the VPS1 health check commits; repo-side signals
+# (framework suite, wiki staleness, routing-log recency) are computed fresh here.
+# Spec: workflows/daily-health.md
+
+on:
+  schedule:
+    # 5:00am UTC daily — a morning read for the operator's phone.
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need history so wiki staleness (last-commit age) can be computed.
+          fetch-depth: 0
+
+      - name: Run framework verification suite
+        id: suite
+        continue-on-error: true
+        run: |
+          # CI=true makes run-all.sh skip Phase 7 (live VPS host).
+          OUTPUT=$(CI=true bash tests/run-all.sh 2>&1) || true
+          echo "pass=$(echo "$OUTPUT" | grep -c '  ✓' || true)" >> "$GITHUB_OUTPUT"
+          echo "fail=$(echo "$OUTPUT" | grep -c '  ✗' || true)" >> "$GITHUB_OUTPUT"
+
+      - name: Compose and publish health issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const cp = require('child_process');
+
+            const date = new Date().toISOString().split('T')[0];
+
+            const readJson = (p) => {
+              try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
+              catch (e) { return null; }
+            };
+            const sh = (cmd) => {
+              try { return cp.execSync(cmd, { encoding: 'utf8' }).trim(); }
+              catch (e) { return ''; }
+            };
+
+            // --- Framework suite (computed fresh in the previous step) ---
+            const suitePass = parseInt('${{ steps.suite.outputs.pass }}' || '0');
+            const suiteFail = parseInt('${{ steps.suite.outputs.fail }}' || '0');
+            const suiteStatus = suiteFail === 0 ? '✅' : '❌';
+
+            // --- Last committed VPS health snapshot ---
+            const health = readJson('memory/state/health-status.json');
+            const devloop = readJson('memory/state/dev-loop-status.json');
+
+            const emoji = (s) => s === 'ok' || s === 'healthy' ? '✅'
+              : s === 'warning' ? '⚠️' : (s ? '❌' : '❔');
+
+            let systemRows = '| _no health-status.json snapshot found_ | ❔ | |';
+            let snapshotNote = '';
+            if (health) {
+              snapshotNote = `_Live-host rows reflect the last VPS snapshot (${health.timestamp})._`;
+              const sys = health.system || {};
+              const svc = health.services || {};
+              systemRows = [
+                `| Overall | ${emoji(health.overall)} | ${health.overall || 'unknown'} |`,
+                `| Disk | ${emoji(sys.disk_status)} | ${sys.disk_percent ?? '?'}% |`,
+                `| Memory | ${emoji(sys.memory_status)} | ${sys.memory_percent ?? '?'}% |`,
+                `| Docker | ${emoji(svc.docker_status)} | ${svc.docker_running ?? '?'} containers |`,
+                `| NanoClaw | ${svc.nanoclaw_up ? '✅' : '❌'} | ${svc.nanoclaw_up ? 'up' : 'down'} |`,
+                `| Claude auth | ${svc.claude_auth ? '✅' : '❔'} | ${svc.claude_auth || 'unknown'} |`,
+              ].join('\n');
+            }
+
+            // --- Wiki staleness (repo-side, fresh) ---
+            const wikis = ['docs/centaurion-wiki', 'docs/aob-wiki', 'docs/builderbee-wiki'];
+            const wikiRows = wikis.map(w => {
+              const when = sh(`git log -1 --format=%cr -- ${w}`) || 'never';
+              const days = parseInt(sh(`git log -1 --format=%ct -- ${w}`) || '0');
+              const ageDays = days ? Math.floor((Date.now()/1000 - days) / 86400) : 999;
+              const flag = ageDays > 7 ? '⚠️ stale' : '✅';
+              return `| ${w.replace('docs/','')} | ${when} | ${flag} |`;
+            }).join('\n');
+
+            // --- Routing-log recency (repo-side, fresh) ---
+            let routingLine = 'No routing-log.jsonl found.';
+            try {
+              const lines = fs.readFileSync('memory/state/routing-log.jsonl', 'utf8')
+                .split('\n').filter(l => l.trim() && l.includes('"timestamp"'));
+              const last = lines.length ? JSON.parse(lines[lines.length - 1]) : null;
+              const dayAgo = Date.now() - 24*3600*1000;
+              const recent = lines.filter(l => {
+                try { return new Date(JSON.parse(l).timestamp).getTime() >= dayAgo; }
+                catch (e) { return false; }
+              }).length;
+              routingLine = `Entries: ${lines.length} total, ${recent} in last 24h. Last: ${last ? last.timestamp : 'n/a'}.`;
+            } catch (e) {}
+
+            const devloopLine = devloop
+              ? `${devloop.status} (Phase ${devloop.phase}, ${devloop.tests_remaining} tests remaining) — ${devloop.timestamp}`
+              : 'No dev-loop-status.json snapshot.';
+
+            const title = `[centaurion-health] ${date}`;
+            const body = [
+              `## Daily Health — ${date}`,
+              '',
+              '### Framework Suite (fresh)',
+              `${suiteStatus} **${suitePass} passed, ${suiteFail} failed** (CI scope — Phase 7/VPS excluded)`,
+              '',
+              '### System / Services',
+              '| Component | Status | Notes |',
+              '|-----------|--------|-------|',
+              systemRows,
+              '',
+              snapshotNote,
+              '',
+              '### Dev Loop',
+              `- ${devloopLine}`,
+              '',
+              '### Wiki Freshness (stale if > 7 days)',
+              '| Wiki | Last commit | Status |',
+              '|------|-------------|--------|',
+              wikiRows,
+              '',
+              '### Routing (24h)',
+              `- ${routingLine}`,
+              '',
+              '---',
+              '*Centaurion daily health — GitHub Actions L3 sensing. VPS-live checks come from the last committed snapshot.*',
+            ].join('\n');
+
+            // Close older health issues (single rolling report).
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'daily',
+              state: 'open',
+            });
+            for (const issue of existing.data) {
+              if (issue.title.startsWith('[centaurion-health]') && issue.title !== title) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed',
+                  state_reason: 'completed',
+                });
+              }
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['report', 'daily'],
+            });

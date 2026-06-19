@@ -49,7 +49,15 @@ run_phase 3 "Multi-Runtime & Feedback" "tests/verify-multi-runtime.sh"
 run_phase 4 "Knowledge Depth" "tests/verify-knowledge-depth.sh"
 run_phase 5 "Operational Workflows" "tests/verify-operational.sh"
 run_phase 6 "Cross-Venture Coherence" "tests/verify-coherence.sh"
-run_phase 7 "Production Deployment" "tests/verify-production.sh"
+# Phase 7 validates the live VPS1 host (cron, NanoClaw, deployment) and cannot pass
+# on an ephemeral CI runner. GitHub Actions sets CI=true; skip it there. It still runs
+# locally and on VPS1 (where the dev loop and health check cover production).
+if [ "${CI:-}" = "true" ]; then
+  echo ""
+  echo "⏭  Phase 7 (Production Deployment): skipped in CI (validates live VPS1 host)"
+else
+  run_phase 7 "Production Deployment" "tests/verify-production.sh"
+fi
 run_phase 8 "Operational Automation" "tests/verify-automation.sh"
 run_phase 10 "Hermes Integration" "tests/verify-hermes-integration.sh"
 

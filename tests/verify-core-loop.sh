@@ -316,6 +316,12 @@ CLAUDE_PATHS=$(grep -oE '(identity|framework|agents|skills|memory|workflows)/[A-
 R10_1_OK=true
 for path in $CLAUDE_PATHS; do
   if [ ! -f "$REPO_ROOT/$path" ]; then
+    # Skip intentionally gitignored per-operator/runtime files (e.g. onboarding-state.json,
+    # identity/BASELINE-*.md). They exist on the operator's host but are absent by design in
+    # fresh clones / CI, so a missing gitignored path is not a broken reference.
+    if git -C "$REPO_ROOT" check-ignore -q "$path" 2>/dev/null; then
+      continue
+    fi
     fail "R10.1: CLAUDE.md references non-existent file: $path"
     R10_1_OK=false
   fi
@@ -331,6 +337,10 @@ AGENTS_PATHS=$(grep -oE '(identity|framework|agents|skills|memory|workflows)/[A-
 R10_2_OK=true
 for path in $AGENTS_PATHS; do
   if [ ! -f "$REPO_ROOT/$path" ]; then
+    # Skip intentionally gitignored per-operator/runtime files (absent by design in CI).
+    if git -C "$REPO_ROOT" check-ignore -q "$path" 2>/dev/null; then
+      continue
+    fi
     fail "R10.2: AGENTS.md references non-existent file: $path"
     R10_2_OK=false
   fi
