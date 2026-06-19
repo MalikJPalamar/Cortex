@@ -1,13 +1,10 @@
 from fastapi import APIRouter
 from api.mock_data import (
-    get_ai_operations,
     create_ai_operation,
     get_operation_by_id,
     get_market_intelligence,
     generate_report,
-    get_pipelines,
     trigger_pipeline,
-    get_settings,
     update_settings
 )
 # Real Centaurion state (reads committed routing-log/ratings/dev-loop/workflows).
@@ -15,6 +12,9 @@ from api.live_data import (
     get_dashboard_stats,
     get_health_status,
     get_live_status,
+    get_ai_operations,
+    get_pipelines,
+    get_settings,
 )
 
 router = APIRouter()

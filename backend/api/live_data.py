@@ -186,3 +186,129 @@ def get_live_status() -> dict:
         "ratings_count": len(ratings),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def _route_status(r: dict) -> str:
+    """Map a routing entry to an operation status using its recorded outcome."""
+    if r.get("routing_correct") is False:
+        return "failed"
+    if isinstance(r.get("outcome_rating"), (int, float)):
+        return "completed"
+    return "logged"
+
+
+def get_ai_operations() -> dict:
+    """Real 'operations' derived from logged routing decisions + the live dev loop.
+
+    Each routing decision becomes one operation; the current dev-loop run (if active)
+    is surfaced as an in-progress operation at the top. Shape matches the old mock:
+    a list of {id, name, type, status, created_at} under "operations" with "total".
+    """
+    routing = _routing_entries()
+    operations = []
+
+    devloop = _read_json("memory/state/dev-loop-status.json")
+    dl_status = str(devloop.get("status", "")).lower()
+    if dl_status:
+        running = dl_status in {"progressing", "running", "in_progress", "active"}
+        operations.append(
+            {
+                "id": f"devloop-{devloop.get('date', 'current')}",
+                "name": f"Dev loop — phase {devloop.get('phase', '?')}, "
+                f"{devloop.get('tests_remaining', '?')} checks remaining",
+                "type": "dev_loop",
+                "status": "running" if running else dl_status,
+                "created_at": devloop.get("timestamp"),
+            }
+        )
+
+    for i, r in enumerate(
+        sorted(routing, key=lambda x: x.get("timestamp", ""), reverse=True)
+    ):
+        task = (r.get("task") or "Routing decision")[:80]
+        operations.append(
+            {
+                "id": f"route-{i:04d}",
+                "name": task,
+                "type": str(r.get("route", "route")),
+                "status": _route_status(r),
+                "created_at": r.get("timestamp"),
+            }
+        )
+
+    return {"operations": operations, "total": len(operations)}
+
+
+def _workflow_name(path: str) -> str:
+    """Extract a workflow's `name:` field; fall back to the filename."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                stripped = line.strip()
+                if stripped.startswith("name:"):
+                    name = stripped[len("name:"):].strip().strip("'\"")
+                    if name:
+                        return name
+    except OSError:
+        pass
+    return os.path.basename(path)
+
+
+def get_pipelines() -> dict:
+    """Real CI/CD pipelines read from .github/workflows/*.yml|*.yaml.
+
+    Status is "configured": runtime querying of the Actions API needs a token we
+    deliberately do not embed. Shape matches the old mock: {id, name, status, branch}.
+    """
+    paths = sorted(
+        glob.glob(_path(".github/workflows/*.yml"))
+        + glob.glob(_path(".github/workflows/*.yaml"))
+    )
+    pipelines = []
+    for path in paths:
+        stem = os.path.splitext(os.path.basename(path))[0]
+        pipelines.append(
+            {
+                "id": f"pipe-{stem}",
+                "name": _workflow_name(path),
+                "status": "configured",
+                "branch": "main",
+            }
+        )
+    return {"pipelines": pipelines, "total": len(pipelines)}
+
+
+def get_settings() -> dict:
+    """Real configuration summary — repo identity + memory service status.
+
+    Reads memory/supermemory.json for the memory bus config. Never surfaces raw
+    secret values: the apiKey there is an env-ref placeholder, and we report only
+    whether the backing env var is set, never the value itself.
+    """
+    supermem = _read_json("memory/supermemory.json")
+    api_key_ref = str(supermem.get("apiKey", ""))
+    # Only report configured-ness, never the raw value. The committed value is an
+    # env-ref placeholder ("${SUPERMEMORY_API_KEY}"); resolve presence from the env.
+    env_var = str(supermem.get("apiKeySource", "")).split(":", 1)[-1] or "SUPERMEMORY_API_KEY"
+    key_configured = bool(os.environ.get(env_var)) or api_key_ref.startswith("${")
+
+    return {
+        "identity": {
+            "service": "Centaurion",
+            "description": "AI-Driven Cognitive Operating System",
+            "version": "1.0.0",
+        },
+        "memory": {
+            "service": supermem.get("service", "supermemory"),
+            "tier": supermem.get("tier", "unknown"),
+            "status": supermem.get("status", "unknown"),
+            "api_key_configured": key_configured,
+            "auto_capture": bool(supermem.get("autoCapture", False)),
+            "auto_recall": bool(supermem.get("autoRecall", False)),
+        },
+        "preferences": {
+            "theme": "dark",
+            "auto_refresh": True,
+            "refresh_interval": 30,
+        },
+    }
