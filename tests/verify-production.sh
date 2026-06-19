@@ -75,33 +75,59 @@ fi
 # ============================================================
 # R32: NanoClaw / Nova — Agent Is Live
 # ============================================================
+# Two supported topologies:
+#   (a) Host install — a /root/nanoclaw daemon (systemd) that spawns ephemeral
+#       agent containers per message.
+#   (b) Containerized — NanoClaw/OpenClaw runs as a long-lived Docker container
+#       (e.g. ghcr.io/hostinger/hvps-openclaw) with its workspace under
+#       /data/.openclaw. This is the current VPS topology.
+# Each check below accepts EITHER topology so Phase 7 reflects the real deployment.
 echo ""
 echo "═══ R32: NanoClaw / Nova ═══"
 
-# R32.1: NanoClaw directory exists on this machine
+# Detect a running NanoClaw/OpenClaw container (topology b).
+NANOCLAW_CONTAINER=""
+if command -v docker &>/dev/null; then
+  NANOCLAW_CONTAINER=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE 'nanoclaw|openclaw|claw' | head -1)
+fi
+# Best-effort read of the container's workspace files (config, SOUL).
+nc_read() { [ -n "$NANOCLAW_CONTAINER" ] && docker exec "$NANOCLAW_CONTAINER" sh -c "$1" 2>/dev/null; }
+
+# R32.1: NanoClaw deployment exists (host dir OR running container)
 if [ -d "/root/nanoclaw" ] || [ -d "$HOME/nanoclaw" ]; then
-  pass "R32.1: NanoClaw directory exists"
+  pass "R32.1: NanoClaw directory exists (host install)"
+elif [ -n "$NANOCLAW_CONTAINER" ]; then
+  pass "R32.1: NanoClaw/OpenClaw deployed as container ($NANOCLAW_CONTAINER)"
 else
-  fail "R32.1: NanoClaw directory not found (/root/nanoclaw)"
+  fail "R32.1: No NanoClaw host dir (/root/nanoclaw) or running container found"
 fi
 
-# R32.2: NanoClaw .env exists with model config
+# R32.2: NanoClaw config exists (host .env OR container workspace config)
 NANOCLAW_ENV=""
 for candidate in /root/nanoclaw/.env "$HOME/nanoclaw/.env"; do
   if [ -f "$candidate" ]; then NANOCLAW_ENV="$candidate"; break; fi
 done
+NANOCLAW_CFG=""   # captured model/provider config text, from whichever topology
 if [ -n "$NANOCLAW_ENV" ]; then
-  pass "R32.2: NanoClaw .env exists"
+  NANOCLAW_CFG=$(cat "$NANOCLAW_ENV" 2>/dev/null)
+  pass "R32.2: NanoClaw .env exists (host install)"
+elif [ -n "$NANOCLAW_CONTAINER" ]; then
+  NANOCLAW_CFG=$(nc_read 'cat /data/.openclaw/*.json 2>/dev/null')
+  if [ -n "$NANOCLAW_CFG" ]; then
+    pass "R32.2: NanoClaw/OpenClaw config present in container workspace"
+  else
+    fail "R32.2: Container running but no workspace config found (/data/.openclaw)"
+  fi
 else
-  fail "R32.2: NanoClaw .env not found"
+  fail "R32.2: NanoClaw config not found (no host .env, no container)"
 fi
 
-# R32.3: NanoClaw is using a free model (not burning credits)
-if [ -n "$NANOCLAW_ENV" ]; then
-  if grep -qi "free\|qwen\|minimax" "$NANOCLAW_ENV" 2>/dev/null; then
-    pass "R32.3: NanoClaw configured with free/low-cost model"
+# R32.3: Using a low-cost / non-Anthropic provider (not burning subscription credits)
+if [ -n "$NANOCLAW_CFG" ]; then
+  if echo "$NANOCLAW_CFG" | grep -qiE "free|qwen|minimax|nexos|openrouter|groq|deepseek"; then
+    pass "R32.3: Configured with a low-cost / non-Anthropic provider"
   else
-    fail "R32.3: NanoClaw model may not be free — check .env MODEL line"
+    fail "R32.3: Provider may not be low-cost — check model/provider config"
   fi
 fi
 
@@ -122,6 +148,9 @@ if docker images --format '{{.Repository}}' 2>/dev/null | grep -qi "nanoclaw-age
 fi
 if [ "$ORCH_LIVE" = "1" ] && [ "$IMAGE_READY" = "1" ]; then
   pass "R32.4: NanoClaw orchestrator running + agent image built (ready to spawn)"
+elif [ -n "$NANOCLAW_CONTAINER" ]; then
+  # Containerized topology: the long-lived container IS the live orchestrator.
+  pass "R32.4: NanoClaw/OpenClaw orchestrator live as container ($NANOCLAW_CONTAINER)"
 elif [ "$ORCH_LIVE" = "1" ]; then
   fail "R32.4: Orchestrator running but agent image missing — run /root/nanoclaw/container/build.sh"
 elif [ "$IMAGE_READY" = "1" ]; then
@@ -130,16 +159,21 @@ else
   fail "R32.4: NanoClaw orchestrator not running and agent image not built"
 fi
 
-# R32.5: SOUL.md deployed matches repo's Nova personality
-if [ -f "/root/nanoclaw/SOUL.md" ] || [ -f "$HOME/nanoclaw/SOUL.md" ]; then
-  SOUL_FILE=$(find /root/nanoclaw "$HOME/nanoclaw" -name "SOUL.md" 2>/dev/null | head -1)
-  if [ -n "$SOUL_FILE" ] && grep -qi "Nova\|sensing\|afferent" "$SOUL_FILE"; then
-    pass "R32.5: SOUL.md contains Nova personality"
-  else
-    fail "R32.5: SOUL.md exists but doesn't match Nova personality"
-  fi
+# R32.5: SOUL.md deployed matches repo's Nova personality (host file OR container workspace)
+SOUL_CONTENT=""
+SOUL_SOURCE=""
+HOST_SOUL=$(find /root/nanoclaw "$HOME/nanoclaw" -name "SOUL.md" 2>/dev/null | head -1)
+if [ -n "$HOST_SOUL" ]; then
+  SOUL_CONTENT=$(cat "$HOST_SOUL" 2>/dev/null); SOUL_SOURCE="$HOST_SOUL"
+elif [ -n "$NANOCLAW_CONTAINER" ]; then
+  SOUL_CONTENT=$(nc_read 'cat /data/.openclaw/workspace/SOUL.md 2>/dev/null'); SOUL_SOURCE="container workspace"
+fi
+if [ -z "$SOUL_CONTENT" ]; then
+  fail "R32.5: SOUL.md not deployed to NanoClaw/OpenClaw"
+elif echo "$SOUL_CONTENT" | grep -qiE "Nova|sensing|afferent|Centaurion"; then
+  pass "R32.5: Deployed SOUL.md carries Nova/Centaurion identity ($SOUL_SOURCE)"
 else
-  fail "R32.5: SOUL.md not deployed to NanoClaw"
+  fail "R32.5: Deployed SOUL.md is the generic template, not the Centaurion Nova soul ($SOUL_SOURCE)"
 fi
 
 # ============================================================
