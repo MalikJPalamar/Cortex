@@ -26,7 +26,7 @@ Centaurion/
 │   │       └── README.md
 │   └── CI-CD-automations/
 │       ├── README.md
-│       ├── Docker-containerization/
+│       ├── Docker-containerization/   ← ⚠️ legacy prototype, NOT the prod deploy (see its DEPRECATED.md)
 │       │   ├── README.md
 │       │   ├── Dockerfile
 │       │   ├── docker-compose.yml

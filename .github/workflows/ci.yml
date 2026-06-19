@@ -42,7 +42,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest pytest-cov
+          pip install pytest pytest-cov "httpx<0.28"
+          pip install -r backend/requirements.txt
 
       - name: Run tests
         run: |
@@ -54,11 +55,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run security scan
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Dependency audit (advisory)
         run: |
-          pip install safety bandit
-          safety check || true
-          bandit -r . -x ./tests || true
+          pip install safety
+          # Transitive CVEs we can't immediately fix shouldn't block the pipeline.
+          safety check || echo "⚠️ advisory: safety found dependency issues (non-blocking)"
+
+      - name: Static security scan (blocking, our code only)
+        run: |
+          pip install bandit
+          # Scope to our code (excludes the legacy Cognitive-Company server).
+          # -ll reports medium+ severity, skipping the low-severity 0.0.0.0 bind notice.
+          bandit -r backend main.py -ll
 
   build:
     runs-on: ubuntu-latest
@@ -72,8 +85,13 @@ jobs:
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./Cognitive-Company/CI-CD-automations/Docker-containerization
+          # Build the app that actually deploys to Render (root Dockerfile:
+          # React/Vite frontend + FastAPI backend). render.yaml uses this same
+          # Dockerfile/context.
+          context: .
+          file: ./Dockerfile
           push: false
+          load: true            # load into the local daemon so `docker run` can find it
           tags: centaurion:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -81,12 +99,18 @@ jobs:
       - name: Run container health check
         run: |
           docker run -d --name centaurion-test -p 8000:8000 centaurion:latest
-          sleep 5
-          if curl -f http://localhost:8000 > /dev/null 2>&1; then
-            echo "✅ Container health check passed"
-          else
+          # App A is heavier (uvicorn boot); poll the canonical liveness endpoint.
+          ok=""
+          for i in $(seq 1 12); do
+            if curl -fsS http://localhost:8000/api/health > /dev/null 2>&1; then
+              echo "✅ Container health check passed"; ok=1; break
+            fi
+            sleep 5
+          done
+          if [ -z "$ok" ]; then
             echo "❌ Container health check failed"
             docker logs centaurion-test
+            docker rm -f centaurion-test
             exit 1
           fi
           docker rm -f centaurion-test

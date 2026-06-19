@@ -22,9 +22,12 @@ Fill in these settings:
 
 ## Step 3: Build Settings
 
+> **Note:** A `render.yaml` Blueprint at the repo root already encodes these
+> settings. Connecting via Blueprint is preferred over filling them in by hand.
+
 | Setting | Value |
 |---------|-------|
-| **Dockerfile Path** | `Cognitive-Company/CI-CD-automations/Docker-containerization/Dockerfile` |
+| **Dockerfile Path** | `Dockerfile` (the root Dockerfile — React frontend + FastAPI backend) |
 | **Docker Context** | `./` |
 
 ## Step 4: Environment Variables
@@ -35,8 +38,7 @@ Add these variables:
 
 | Key | Value |
 |-----|-------|
-| `API_KEYS` | Your API keys |
-| `SCHEDULE` | cron schedule |
+| `PORT` | `8000` |
 
 ## Step 5: Deploy
 
