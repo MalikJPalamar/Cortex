@@ -13,6 +13,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 
+# Real Centaurion state read by the live dashboard (backend/api/live_data.py resolves
+# REPO_ROOT to /app). A read-only snapshot baked at build time — refreshes each deploy.
+# Verified secret-free: memory/supermemory.json is an env-ref, not a real key.
+COPY memory/ ./memory/
+COPY .github/ ./.github/
+COPY .planning/ ./.planning/
+
 WORKDIR /app/frontend
 RUN npm install && npm run build
 
