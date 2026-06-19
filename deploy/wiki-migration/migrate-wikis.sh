@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+#
+# migrate-wikis.sh — Split docs/*-wiki subdirectories into separate GitHub repos.
+#
+# PT-7 (Phase 9): "Wiki repos as separate GitHub repos (not just docs/ subdirectories)."
+#
+# SAFETY MODEL
+#   Default mode is a DRY RUN. It stages every repo into a temp working area,
+#   generates a README, and prints EXACTLY the `gh repo create` command it would
+#   run — but it creates nothing on GitHub and pushes nothing.
+#
+#   The irreversible step (creating + pushing to a real GitHub repo under the
+#   operator's account) only happens when you pass --execute. This keeps the
+#   outward, semi-permanent action in the operator's hands.
+#
+# USAGE
+#   bash deploy/wiki-migration/migrate-wikis.sh            # DRY RUN (default)
+#   bash deploy/wiki-migration/migrate-wikis.sh --execute  # actually create+push
+#   bash deploy/wiki-migration/migrate-wikis.sh --help
+#
+# OPTIONS
+#   --execute        Actually run `gh repo create ... --push`. Default is dry run.
+#   --public         Create the repos as --public (default is --private).
+#   --org <name>     GitHub owner/org for the new repos (default: MalikJPalamar).
+#   --help           Show this help and exit.
+#
+# IDEMPOTENCE
+#   - The staging area is rebuilt cleanly on every run (rm -rf then recreate).
+#   - In --execute mode, if the target repo already exists on GitHub the
+#     `gh repo create` call is skipped with a clear notice (no clobber).
+#
+set -euo pipefail
+
+# ----------------------------------------------------------------------------
+# Config / defaults
+# ----------------------------------------------------------------------------
+GH_OWNER="MalikJPalamar"
+VISIBILITY="--private"
+EXECUTE=0
+
+# Resolve repo root relative to this script (deploy/wiki-migration/ -> repo root).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+DOCS_DIR="${REPO_ROOT}/docs"
+STAGING_DIR="${REPO_ROOT}/deploy/wiki-migration/.staging"
+
+# ----------------------------------------------------------------------------
+# Parse args
+# ----------------------------------------------------------------------------
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --execute) EXECUTE=1; shift ;;
+    --public)  VISIBILITY="--public"; shift ;;
+    --private) VISIBILITY="--private"; shift ;;
+    --org)     GH_OWNER="${2:?--org requires a value}"; shift 2 ;;
+    --help|-h)
+      sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      exit 0
+      ;;
+    *) echo "ERROR: unknown argument: $1 (try --help)" >&2; exit 2 ;;
+  esac
+done
+
+# ----------------------------------------------------------------------------
+# Helpers
+# ----------------------------------------------------------------------------
+say()  { printf '%s\n' "$*"; }
+hr()   { printf '%s\n' "------------------------------------------------------------"; }
+
+# Title-case a wiki dir name like "aob-wiki" -> "AOB Wiki" (best-effort label).
+human_label() {
+  case "$1" in
+    aob-wiki)         echo "AOB Wiki — Art of Breath" ;;
+    builderbee-wiki)  echo "BuilderBee Wiki" ;;
+    centaurion-wiki)  echo "Centaurion Wiki" ;;
+    *)                echo "$1" ;;
+  esac
+}
+
+# One-line purpose for the generated README, derived from each wiki's content.
+wiki_purpose() {
+  case "$1" in
+    aob-wiki)
+      echo "Knowledge base for the Art of Breath (AOB) venture — breathwork education, facilitator certification, CRM migration, and tech stack." ;;
+    builderbee-wiki)
+      echo "Knowledge base for the BuilderBee venture — an AI automation agency: GHL playbook, client onboarding, service offerings, and reusable automation patterns." ;;
+    centaurion-wiki)
+      echo "Knowledge base for the Centaurion exo-cortex — the Active Inference architecture: Three Laws, the seven-step loop, Free Energy Principle, Markov blankets, the Precision Ratio, memory architecture, and multi-runtime deployment." ;;
+    *)
+      echo "Migrated wiki extracted from the Centaurion monorepo docs/ directory." ;;
+  esac
+}
+
+# Generate a README.md for a staged wiki, derived from its actual page list.
+generate_readme() {
+  local wiki="$1" staged="$2"
+  local label purpose readme
+  label="$(human_label "$wiki")"
+  purpose="$(wiki_purpose "$wiki")"
+  readme="${staged}/README.md"
+
+  {
+    echo "# ${label}"
+    echo ""
+    echo "${purpose}"
+    echo ""
+    echo "> Migrated from the [Centaurion](https://github.com/${GH_OWNER}/Centaurion) monorepo"
+    echo "> (\`docs/${wiki}/\`) into a standalone repository as part of PT-7 (Phase 9)."
+    echo ""
+    echo "## Pages"
+    echo ""
+    echo "| Page | File |"
+    echo "|------|------|"
+    # List every markdown page except the README itself.
+    while IFS= read -r f; do
+      local base name
+      base="$(basename "$f")"
+      [[ "$base" == "README.md" ]] && continue
+      name="$(basename "$f" .md)"
+      echo "| ${name} | [${base}](${base}) |"
+    done < <(find "$staged" -maxdepth 1 -name '*.md' | sort)
+    echo ""
+    echo "---"
+    echo ""
+    echo "_This README is generated by \`deploy/wiki-migration/migrate-wikis.sh\`._"
+  } > "$readme"
+}
+
+# ----------------------------------------------------------------------------
+# Preflight
+# ----------------------------------------------------------------------------
+hr
+if [[ "$EXECUTE" -eq 1 ]]; then
+  say "MODE: EXECUTE  (will create + push GitHub repos)"
+else
+  say "MODE: DRY RUN  (default — nothing will be created or pushed)"
+  say "      Re-run with --execute to actually create the repos."
+fi
+say "OWNER:      ${GH_OWNER}"
+say "VISIBILITY: ${VISIBILITY}"
+say "DOCS DIR:   ${DOCS_DIR}"
+say "STAGING:    ${STAGING_DIR}"
+hr
+
+if [[ ! -d "$DOCS_DIR" ]]; then
+  echo "ERROR: docs dir not found: ${DOCS_DIR}" >&2
+  exit 1
+fi
+
+# In execute mode, require gh + an authenticated session.
+if [[ "$EXECUTE" -eq 1 ]]; then
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "ERROR: gh (GitHub CLI) is required for --execute." >&2; exit 1
+  fi
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "ERROR: gh is not authenticated. Run 'gh auth login' first." >&2; exit 1
+  fi
+fi
+
+# Discover wiki dirs: docs/*-wiki
+mapfile -t WIKIS < <(find "$DOCS_DIR" -maxdepth 1 -type d -name '*-wiki' -printf '%f\n' | sort)
+if [[ "${#WIKIS[@]}" -eq 0 ]]; then
+  echo "ERROR: no docs/*-wiki directories found under ${DOCS_DIR}" >&2
+  exit 1
+fi
+say "Found ${#WIKIS[@]} wiki dir(s): ${WIKIS[*]}"
+say ""
+
+# Rebuild staging cleanly each run (idempotent).
+rm -rf "$STAGING_DIR"
+mkdir -p "$STAGING_DIR"
+
+# ----------------------------------------------------------------------------
+# Per-wiki processing
+# ----------------------------------------------------------------------------
+for wiki in "${WIKIS[@]}"; do
+  src="${DOCS_DIR}/${wiki}"
+  staged="${STAGING_DIR}/${wiki}"
+  repo="${GH_OWNER}/${wiki}"
+  page_count="$(find "$src" -maxdepth 1 -name '*.md' | wc -l | tr -d ' ')"
+
+  hr
+  say "WIKI: ${wiki}  (${page_count} markdown page(s))"
+  say "  source:  ${src}"
+  say "  staging: ${staged}"
+  say "  target:  https://github.com/${repo}"
+
+  # 1. Copy content into a fresh staging dir.
+  mkdir -p "$staged"
+  cp -R "${src}/." "${staged}/"
+
+  # 2. Generate / refresh README (overwrites any existing copied README so the
+  #    new repo's README is consistent and links to the migration source).
+  generate_readme "$wiki" "$staged"
+
+  # 3. Initialize a fresh git repo in staging and stage all files.
+  git -C "$staged" init -q
+  git -C "$staged" add -A
+  # Use a local-only identity for the staged repo so we never depend on / mutate
+  # the operator's global git config.
+  git -C "$staged" -c user.name="wiki-migration" \
+      -c user.email="wiki-migration@centaurion.local" \
+      commit -q -m "chore: initial import of ${wiki} from Centaurion monorepo" || true
+
+  # 4. Create + push (guarded behind --execute).
+  create_cmd="gh repo create ${repo} ${VISIBILITY} --source=. --remote=origin --push"
+  if [[ "$EXECUTE" -eq 1 ]]; then
+    if gh repo view "$repo" >/dev/null 2>&1; then
+      say "  SKIP create: ${repo} already exists on GitHub (no clobber)."
+    else
+      say "  RUN: (cd ${staged} && ${create_cmd})"
+      ( cd "$staged" && eval "$create_cmd" )
+      say "  DONE: created and pushed ${repo}"
+    fi
+  else
+    say "  WOULD RUN: (cd ${staged} && ${create_cmd})"
+    say "  [dry run] no repo created, nothing pushed."
+  fi
+done
+
+hr
+if [[ "$EXECUTE" -eq 1 ]]; then
+  say "EXECUTE complete. ${#WIKIS[@]} wiki repo(s) processed under ${GH_OWNER}."
+  say "Next: decide whether to keep docs/ copies or replace with submodules"
+  say "      (see deploy/wiki-migration/README.md → Post-migration options)."
+else
+  say "DRY RUN complete. Reviewed the plan for ${#WIKIS[@]} wiki(s)."
+  say "Nothing was created. To proceed for real:"
+  say "  bash deploy/wiki-migration/migrate-wikis.sh --execute"
+fi
+hr
