@@ -100,9 +100,14 @@
 ### P3 — Phase 9 infra remainder
 - [ ] **PT-7** Syncthing (VPS1↔VPS2 wiki sync), InfraNodus MCP (gap analysis),
   wikis-as-separate-repos. **Done when:** Phase 9 DoD infra items met.
+  - Syncthing scaffold added (`deploy/syncthing/`) — activation needs a run on
+    each host (install + device-ID exchange + folder share on VPS1 *and* VPS2).
+    Checkbox stays unchecked until both hosts are paired and "Up to Date".
   - InfraNodus scaffold added (`memory/infranodus.json` + `deploy/infranodus/`) —
     needs `INFRANODUS_API_KEY` to activate. MCP config + HTTP-API runbook + gap-analysis
     skill wiring all in place; flip to live by setting the key on the host.
+  - Wiki-as-repos migration kit added (`deploy/wiki-migration/`, dry-run safe) —
+    operator runs `migrate-wikis.sh --execute` to create the separate repos.
 
 **Sequencing:** PT-1 (clean footing) → PT-2/3/4 (system is real & live) → PT-5/6 (polish & reliability) → PT-7 (infra).
 
