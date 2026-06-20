@@ -256,9 +256,11 @@ check_file_contains "memory/wiki-repos.json" "aob-wiki" "R7.2b: References aob-w
 check_file_contains "memory/wiki-repos.json" "builderbee-wiki" "R7.2c: References builderbee-wiki"
 check_file_contains "memory/wiki-repos.json" "centaurion-wiki" "R7.2d: References centaurion-wiki"
 
-# R7.3: Graphiti config with planned status
+# R7.3: Graphiti config with a recognized lifecycle status.
+# Accepts forward progress: planned_month_2 (original) → scaffolded → connected.
+# Pinning to "planned" would fail the suite the moment Graphiti is actually built.
 check_file_exists "memory/graphiti.json" "R7.3a: graphiti.json exists"
-check_file_contains "memory/graphiti.json" "planned_month_2" "R7.3b: Graphiti marked as planned"
+check_file_contains "memory/graphiti.json" "planned_month_2\|scaffolded\|connected" "R7.3b: Graphiti has a recognized status (planned/scaffolded/connected)"
 
 # R7.4: No actual API keys committed
 if grep -rq "sm_[a-zA-Z0-9]" "$REPO_ROOT/memory/" 2>/dev/null; then
