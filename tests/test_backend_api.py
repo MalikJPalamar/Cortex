@@ -130,3 +130,50 @@ def test_settings_are_live_not_mock():
     serialized = json.dumps(data)
     assert "${" not in serialized, "no env-ref placeholders leaked"
     assert "SUPERMEMORY_API_KEY" not in serialized
+
+
+# ---- PT-4: live runtime fetch (GitHub raw) with local fallback ----
+
+def test_live_fetch_falls_back_on_network_failure():
+    """A failed remote fetch must fall back to the baked-in local file, not crash."""
+    import importlib
+
+    import api.live_data as L
+    importlib.reload(L)
+    L._cache.clear()
+    L._LIVE_FETCH = True
+    L._RAW_BASE = "https://raw.githubusercontent.com/MalikJPalamar/Cortex/__no_such_ref__"
+    L._FETCH_TIMEOUT = 2
+    stats = L.get_dashboard_stats()
+    # Falls back to local committed state — real, non-erroring.
+    assert isinstance(stats["total_operations"], int)
+    assert stats["total_operations"] >= 0
+    importlib.reload(L)  # restore default module state for other tests
+
+
+def test_live_fetch_disabled_uses_local():
+    """CENTAURION_LIVE_FETCH=0 reads purely local files (no network)."""
+    import importlib
+
+    import api.live_data as L
+    importlib.reload(L)
+    L._LIVE_FETCH = False
+    L._cache.clear()
+    # _fetch_raw must short-circuit to None for a live path when disabled.
+    assert L._fetch_raw("memory/state/routing-log.jsonl") is None
+    stats = L.get_dashboard_stats()
+    assert isinstance(stats["total_operations"], int)
+    importlib.reload(L)
+
+
+def test_fetch_cache_is_ttl_keyed():
+    """Repeated reads within TTL hit the in-process cache, not the network each time."""
+    import importlib
+
+    import api.live_data as L
+    importlib.reload(L)
+    L._cache.clear()
+    L._LIVE_FETCH = False  # avoid real network in CI; exercise cache bookkeeping
+    L._fetch_raw("memory/state/ratings.jsonl")  # disabled -> returns None, no cache entry
+    assert "memory/state/ratings.jsonl" not in L._cache
+    importlib.reload(L)

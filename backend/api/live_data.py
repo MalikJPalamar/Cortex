@@ -1,14 +1,21 @@
 """Live data provider — reads REAL Centaurion state instead of mock fixtures.
 
-The committed state files (routing-log, ratings, dev-loop status, STATE.md) and the
-GitHub workflow definitions ship inside the Render image, so the deployed dashboard
-can surface genuine system state. Every reader is defensive: if a file is missing or
-malformed, it degrades to safe zeros/empties rather than raising — the dashboard must
-never 500 because a log rotated.
+PT-4: the state files (routing-log, ratings, dev-loop status) are baked into the
+Render image at build time, so they would otherwise FREEZE until the next deploy.
+The dev loop, however, pushes fresh state to GitHub `main` 3×/day. So each reader
+first tries to fetch the file from GitHub raw (cached with a short TTL), and falls
+back to the baked-in local copy on any failure. Net effect: the dashboard reflects
+new routing decisions without a redeploy, yet never 500s if the network is down or
+a file is missing/malformed.
+
+Toggle the live fetch with env CENTAURION_LIVE_FETCH=0 (defaults on). Source repo/
+branch are overridable via CENTAURION_RAW_BASE.
 """
 import glob
 import json
 import os
+import time
+import urllib.request
 from datetime import datetime, timezone
 
 # backend/api/live_data.py -> repo root is two levels up. Overridable for tests.
@@ -17,35 +24,96 @@ REPO_ROOT = os.environ.get(
     "CENTAURION_REPO", os.path.abspath(os.path.join(_HERE, "..", ".."))
 )
 
+# Runtime fetch of fresh state from GitHub raw (dev loop pushes to main 3×/day).
+_LIVE_FETCH = os.environ.get("CENTAURION_LIVE_FETCH", "1") != "0"
+_RAW_BASE = os.environ.get(
+    "CENTAURION_RAW_BASE",
+    "https://raw.githubusercontent.com/MalikJPalamar/Cortex/main",
+)
+_FETCH_TTL = int(os.environ.get("CENTAURION_FETCH_TTL", "120"))  # seconds
+_FETCH_TIMEOUT = float(os.environ.get("CENTAURION_FETCH_TIMEOUT", "4"))
+# Only these committed-state paths are fetched live; everything else stays local.
+_LIVE_PATHS = {
+    "memory/state/routing-log.jsonl",
+    "memory/state/ratings.jsonl",
+    "memory/state/dev-loop-status.json",
+}
+_cache: dict = {}  # rel -> (expires_epoch, text|None)
+
 
 def _path(rel: str) -> str:
     return os.path.join(REPO_ROOT, rel)
 
 
-def _read_jsonl(rel: str) -> list:
-    """Read a .jsonl file into a list of dicts, skipping blanks/bad lines."""
-    rows = []
-    p = _path(rel)
-    if os.path.isfile(p):
-        with open(p, encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rows.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-    return rows
+def _fetch_raw(rel: str):
+    """Best-effort fetch of a file's text from GitHub raw, TTL-cached.
+
+    Returns the file text, or None if live fetch is disabled, the path isn't a
+    live path, or the request fails — callers then fall back to the local copy.
+    """
+    if not _LIVE_FETCH or rel not in _LIVE_PATHS:
+        return None
+    now = time.time()
+    cached = _cache.get(rel)
+    if cached and cached[0] > now:
+        return cached[1]
+    text = None
+    url = f"{_RAW_BASE}/{rel}"
+    # Hard-enforce https:// before opening — refuses file://, ftp://, or any
+    # custom scheme even if _RAW_BASE were misconfigured (closes bandit B310).
+    if not url.startswith("https://"):
+        _cache[rel] = (now + _FETCH_TTL, None)
+        return None
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "centaurion-dashboard"}
+        )
+        with urllib.request.urlopen(req, timeout=_FETCH_TIMEOUT) as resp:  # nosec B310 — scheme pinned to https above
+            if resp.status == 200:
+                text = resp.read().decode("utf-8")
+    except Exception:
+        text = None  # network error, 404, timeout — fall back to local
+    _cache[rel] = (now + _FETCH_TTL, text)
+    return text
 
 
-def _read_json(rel: str) -> dict:
+def _read_text(rel: str):
+    """Fresh text from GitHub raw if available, else the baked-in local file."""
+    remote = _fetch_raw(rel)
+    if remote is not None:
+        return remote
     p = _path(rel)
     if os.path.isfile(p):
         try:
             with open(p, encoding="utf-8") as fh:
-                return json.load(fh)
-        except (json.JSONDecodeError, OSError):
+                return fh.read()
+        except OSError:
+            return None
+    return None
+
+
+def _read_jsonl(rel: str) -> list:
+    """Read a .jsonl file into a list of dicts, skipping blanks/bad lines."""
+    rows = []
+    text = _read_text(rel)
+    if text:
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return rows
+
+
+def _read_json(rel: str) -> dict:
+    text = _read_text(rel)
+    if text:
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
             return {}
     return {}
 

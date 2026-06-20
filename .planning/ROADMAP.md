@@ -83,12 +83,13 @@
 - [ ] **PT-2 Verify Nova end-to-end via Telegram** (closes Phase 9 DoD). SOUL is deployed;
   send a real Telegram message and confirm Nova replies in Centaurion sensing identity.
   👤 sends / 🤖 inspects logs. **Done when:** a Telegram exchange shows Nova-as-Nova.
-- [ ] **PT-3 Surface live endpoints in the UI** 🤖. Frontend consumes only
-  `/api/dashboard/stats`; add a "System" panel wiring `/api/status/live` +
-  `/api/cicd/health` (phase, dev-loop, component health). **Done when:** dashboard shows a live system-status panel.
-- [ ] **PT-4 Live data, not a build-time snapshot** 🤖. Stats currently freeze at deploy.
-  Read fresh state (dev-loop-written volume, or pull from VPS/API) so it updates without
-  a redeploy. **Done when:** a new routing decision appears without rebuilding the image.
+- [x] **PT-3 Surface live endpoints in the UI** 🤖. Dashboard now has a live "System
+  Status" panel wiring `/api/status/live` + `/api/cicd/health` (phase, dev-loop,
+  component health) — replaced the hardcoded Pipeline card (#83).
+- [x] **PT-4 Live data, not a build-time snapshot** 🤖. `live_data.py` now fetches state
+  from GitHub raw (`main`) at runtime with a TTL cache, falling back to the baked-in
+  file on any failure. The dev loop pushes 3×/day → dashboard updates without a redeploy.
+  Toggle via `CENTAURION_LIVE_FETCH`/`CENTAURION_FETCH_TTL`.
 
 ### P2 — Retire mock surfaces & harden
 - [ ] **PT-5 Real ai-operations / cicd-pipelines / settings** 🤖. Map ai-operations ←
