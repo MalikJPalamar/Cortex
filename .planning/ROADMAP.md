@@ -54,13 +54,20 @@
 ## Phase 10: Knowledge Graph (Month 2)
 > "Does the system track how knowledge evolves?"
 
-- [ ] Neo4j deployed on VPS1 (Docker)
-- [ ] Graphiti installed and connected via MCP
-- [ ] Temporal entity tracking live
-- [ ] MemPalace installed — Claude conversation exports mined
+- [x] Neo4j deployed (Docker) — `neo4j:5` (5.26.23 community) live on srv1514399, :7474/:7687
+- [~] Graphiti installed and connected via MCP — **scaffolded** (#87): `memory/graphiti.json`
+  + `deploy/graphiti/` (runbook, mcp.json, connection test, temporal-tracking doc). Needs
+  operator: `NEO4J_PASSWORD` + LLM key in host `.env`, then `pip install graphiti-core`.
+- [~] Temporal entity tracking — documented via Graphiti bi-temporal edges (`deploy/graphiti/temporal-tracking.md`); live once Graphiti is activated.
+- [~] MemPalace — Claude conversation exports mined — **runnable miner** (#88):
+  `deploy/mempalace/mine_conversations.py` (stdlib, extracts timestamped decisions/facts
+  → `mempalace-extract.jsonl`, ready to feed Graphiti+Supermemory).
 
 **Definition of Done:** Agent answers "When did we decide to migrate from Ontraport?" from Graphiti.
-**Status note (2026-06-19):** Neo4j IS deployed (container `neo4j:5` live on srv1514399, ports 7474/7687). Graphiti MCP + temporal tracking still pending.
+**Status note (2026-06-20):** Neo4j live; Graphiti + MemPalace scaffolded and runnable.
+Two operator steps gate full activation: NEO4J_PASSWORD + an LLM key in the host `.env`.
+The MemPalace miner already extracts the exact Ontraport-decision record from a sample
+export — once Graphiti is keyed, ingesting it satisfies the DoD.
 
 ---
 
@@ -92,11 +99,16 @@
   Toggle via `CENTAURION_LIVE_FETCH`/`CENTAURION_FETCH_TTL`.
 
 ### P2 — Retire mock surfaces & harden
-- [ ] **PT-5 Real ai-operations / cicd-pipelines / settings** 🤖. Map ai-operations ←
-  routing-log+dev-loop runs; cicd/pipelines ← GitHub Actions API; settings ← real config;
-  drop/wire market. **Done when:** no endpoint returns mock fixtures.
+- [x] **PT-5 Real ai-operations / cicd-pipelines / settings / market** 🤖. All four wired
+  to real state (#78, #85): ai-operations ← routing-log+dev-loop; pipelines ← workflows;
+  settings ← real config; market ← honest "unconfigured" (no fabricated sentiment).
+  **No GET endpoint returns mock fixtures.** (Only `market/intelligence` lacks a live feed,
+  and now says so truthfully instead of faking it.)
 - [x] **PT-6 Kill Render cold-starts** 🤖/👤. Keep-warm cron on `/api/health` (~10 min) or
   paid tier. **Done when:** first-load < 2s consistently. (keep-warm.yml, every 13 min)
+- [x] **PT-8 Backend hardening (CORS + security headers)** 🤖 (#86). CORS locked to an
+  env-driven allowlist (no `*`+credentials); security headers (CSP, X-Frame-Options DENY,
+  nosniff, Referrer-Policy) on every response. Multi-user auth deliberately OUT of scope.
 
 ### P3 — Phase 9 infra remainder
 - [ ] **PT-7** Syncthing (VPS1↔VPS2 wiki sync), InfraNodus MCP (gap analysis),
