@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from api.routes import router
+from security import SecurityHeadersMiddleware, get_allowed_origins
 import os
 
 app = FastAPI(
@@ -12,13 +13,19 @@ app = FastAPI(
 
 FRONTEND_DIR = "/app/frontend/dist"
 
+# Single-operator dashboard, served same-origin. CORS is an explicit allowlist
+# (env-driven via CENTAURION_ALLOWED_ORIGINS) — never a wildcard, which is both
+# invalid and unsafe when combined with credentials. No auth/tenancy is added.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+# Defensive security headers on every response (nosniff, frame deny, CSP, ...).
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(router, prefix="/api")
 
