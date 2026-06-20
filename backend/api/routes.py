@@ -2,8 +2,6 @@ from fastapi import APIRouter
 from api.mock_data import (
     create_ai_operation,
     get_operation_by_id,
-    get_market_intelligence,
-    generate_report,
     trigger_pipeline,
     update_settings
 )
@@ -13,6 +11,8 @@ from api.live_data import (
     get_health_status,
     get_live_status,
     get_ai_operations,
+    get_market_intelligence,
+    generate_report,
     get_pipelines,
     get_settings,
 )

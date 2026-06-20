@@ -5,6 +5,7 @@ fastapi + httpx; the suite is skipped cleanly if those are not installed so it
 never blocks the lightweight smoke tests.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -130,6 +131,57 @@ def test_settings_are_live_not_mock():
     serialized = json.dumps(data)
     assert "${" not in serialized, "no env-ref placeholders leaked"
     assert "SUPERMEMORY_API_KEY" not in serialized
+
+
+# ---- PT-5: market/intelligence is honest real data, not the mock fixture ----
+
+# Old mock fixture values — their absence proves we no longer fabricate sentiment.
+_MOCK_SECTOR_NAMES = {"Technology", "Healthcare", "Finance", "Energy"}
+_MOCK_TREND_TOPICS = {"AI Automation", "Cloud Computing", "Cybersecurity"}
+_MOCK_COMPETITORS = {"TechCorp Inc", "DataSystems", "CloudNine"}
+
+
+def test_market_intelligence_is_live_not_mock():
+    resp = client.get("/api/market/intelligence")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, dict)
+    # Frontend (MarketIntelligence.tsx) renders these collections — must be present.
+    for key in ("status", "sectors", "trends", "competitors", "tracked_tickers", "source"):
+        assert key in data, f"missing {key}"
+    assert isinstance(data["sectors"], list)
+    assert isinstance(data["trends"], list)
+    assert isinstance(data["competitors"], list)
+    assert isinstance(data["tracked_tickers"], list)
+
+    # No fabricated sentiment/percentages from the old mock fixture.
+    sector_names = {s.get("name") for s in data["sectors"] if isinstance(s, dict)}
+    assert sector_names.isdisjoint(_MOCK_SECTOR_NAMES), "must not return mock sectors"
+    trend_topics = {t.get("topic") for t in data["trends"] if isinstance(t, dict)}
+    assert trend_topics.isdisjoint(_MOCK_TREND_TOPICS), "must not return mock trends"
+    comp_names = {c.get("name") for c in data["competitors"] if isinstance(c, dict)}
+    assert comp_names.isdisjoint(_MOCK_COMPETITORS), "must not return mock competitors"
+
+    serialized = json.dumps(data)
+    assert '"bullish"' not in serialized, "no fabricated bullish sentiment"
+    assert '"bearish"' not in serialized, "no fabricated bearish sentiment"
+    assert "2.4" not in serialized, "no fabricated mock percentage"
+
+    # With no SA-scan file on disk, the honest answer is the unconfigured shape.
+    assert data["status"] == "unconfigured"
+    assert data["source"] == "none"
+    assert data["sectors"] == []
+
+
+def test_market_generate_is_honest_not_fake():
+    resp = client.post("/api/market/generate", json={"type": "summary"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, dict)
+    # No fake "generating" job — honest unconfigured status.
+    assert data["status"] == "unconfigured"
+    assert data["source"] == "none"
+    assert data["type"] == "summary"
 
 
 # ---- PT-4: live runtime fetch (GitHub raw) with local fallback ----
