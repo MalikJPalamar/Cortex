@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Play, Pause, RotateCcw } from 'lucide-react'
 
 interface AIOperation {
@@ -6,76 +6,58 @@ interface AIOperation {
   name: string
   type: string
   status: string
-  created_at: string
-  progress?: number
-  result?: string
-  error?: string
+  created_at: string | null
 }
 
-const mockOperations: AIOperation[] = [
-  {
-    id: 'op-001',
-    name: 'Market Analysis - Tech Sector',
-    type: 'market_analysis',
-    status: 'completed',
-    created_at: '2026-03-13T10:30:00Z',
-    result: 'Analysis complete - 47 opportunities identified'
-  },
-  {
-    id: 'op-002',
-    name: 'Competitor Monitoring',
-    type: 'monitoring',
-    status: 'running',
-    created_at: '2026-03-13T11:00:00Z',
-    progress: 65
-  },
-  {
-    id: 'op-003',
-    name: 'Content Generation - Q1 Report',
-    type: 'content_generation',
-    status: 'queued',
-    created_at: '2026-03-13T11:30:00Z'
-  },
-  {
-    id: 'op-004',
-    name: 'Data Processing Pipeline',
-    type: 'data_processing',
-    status: 'completed',
-    created_at: '2026-03-12T14:00:00Z',
-    result: 'Processed 15,000 records'
-  },
-  {
-    id: 'op-005',
-    name: 'Sentiment Analysis',
-    type: 'nlp_analysis',
-    status: 'failed',
-    created_at: '2026-03-12T09:00:00Z',
-    error: 'API rate limit exceeded'
-  }
-]
+interface AIOperationsResponse {
+  operations: AIOperation[]
+  total: number
+}
 
 export default function AIOperations() {
-  const [operations, setOperations] = useState<AIOperation[]>(mockOperations)
+  const [operations, setOperations] = useState<AIOperation[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [newOpName, setNewOpName] = useState('')
   const [newOpType, setNewOpType] = useState('general')
-  
+
+  const loadOperations = () => {
+    fetch('/api/ai-operations')
+      .then(res => res.json())
+      .then((data: AIOperationsResponse) => {
+        setOperations(Array.isArray(data.operations) ? data.operations : [])
+        setLoaded(true)
+      })
+      .catch(() => {
+        setOperations([])
+        setLoaded(true)
+      })
+  }
+
+  useEffect(() => {
+    loadOperations()
+  }, [])
+
   const handleCreate = () => {
     if (!newOpName.trim()) return
-    
-    const newOp: AIOperation = {
-      id: `op-${Date.now()}`,
-      name: newOpName,
-      type: newOpType,
-      status: 'queued',
-      created_at: new Date().toISOString()
-    }
-    
-    setOperations([newOp, ...operations])
-    setNewOpName('')
-    setShowCreate(false)
+
+    fetch('/api/ai-operations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newOpName, type: newOpType })
+    })
+      .then(res => res.json())
+      .then(() => {
+        setNewOpName('')
+        setShowCreate(false)
+        loadOperations()
+      })
+      .catch(() => {
+        setNewOpName('')
+        setShowCreate(false)
+      })
   }
-  
+
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'market_analysis': return '📊'
@@ -83,10 +65,11 @@ export default function AIOperations() {
       case 'content_generation': return '📝'
       case 'data_processing': return '⚙️'
       case 'nlp_analysis': return '🧠'
+      case 'dev_loop': return '🔁'
       default: return '🎯'
     }
   }
-  
+
   return (
     <>
       <div className="section-header">
@@ -96,7 +79,7 @@ export default function AIOperations() {
           New Operation
         </button>
       </div>
-      
+
       {showCreate && (
         <div className="card" style={{ marginBottom: '24px' }}>
           <div className="card-header">
@@ -106,8 +89,8 @@ export default function AIOperations() {
             <div style={{ display: 'grid', gap: '16px', maxWidth: '500px' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Operation Name</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   className="form-input"
                   placeholder="Enter operation name..."
                   value={newOpName}
@@ -116,7 +99,7 @@ export default function AIOperations() {
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label">Type</label>
-                <select 
+                <select
                   className="form-input"
                   value={newOpType}
                   onChange={(e) => setNewOpType(e.target.value)}
@@ -142,7 +125,7 @@ export default function AIOperations() {
           </div>
         </div>
       )}
-      
+
       <div className="card">
         <div className="card-body" style={{ padding: 0 }}>
           <table className="table">
@@ -156,37 +139,23 @@ export default function AIOperations() {
               </tr>
             </thead>
             <tbody>
+              {operations.length === 0 && (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '32px' }}>
+                    {loaded ? 'No operations logged yet' : 'Loading operations…'}
+                  </td>
+                </tr>
+              )}
               {operations.map(op => (
                 <tr key={op.id}>
                   <td>
                     <div style={{ fontWeight: 500 }}>{op.name}</div>
-                    {op.result && (
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                        {op.result}
-                      </div>
-                    )}
-                    {op.progress && (
-                      <div style={{ 
-                        height: '4px', 
-                        background: 'var(--bg-hover)', 
-                        borderRadius: '2px', 
-                        marginTop: '8px',
-                        overflow: 'hidden'
-                      }}>
-                        <div style={{ 
-                          height: '100%', 
-                          width: `${op.progress}%`,
-                          background: 'var(--accent-gold)',
-                          borderRadius: '2px'
-                        }} />
-                      </div>
-                    )}
                   </td>
                   <td>
                     <span style={{ fontSize: '1.2rem', marginRight: '8px' }}>
                       {getTypeIcon(op.type)}
                     </span>
-                    {op.type.replace('_', ' ')}
+                    {op.type.replace(/_/g, ' ')}
                   </td>
                   <td>
                     <span className={`status-badge ${op.status}`}>
@@ -194,7 +163,7 @@ export default function AIOperations() {
                     </span>
                   </td>
                   <td style={{ color: 'var(--text-secondary)' }}>
-                    {new Date(op.created_at).toLocaleString()}
+                    {op.created_at ? new Date(op.created_at).toLocaleString() : '—'}
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '8px' }}>
