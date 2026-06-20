@@ -1,0 +1,3 @@
+# Drop Claude conversation exports (.json/.jsonl) here.
+# Contents are gitignored — raw transcripts hold private content and must never be committed.
+# Only this .gitkeep is tracked.

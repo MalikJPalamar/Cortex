@@ -1,18 +1,58 @@
 {
   "service": "mempalace",
-  "description": "Layer 3: Verbatim archive — raw conversation exports for exact recall",
-  "status": "planned_month_2",
+  "description": "Layer 3: Verbatim archive + conversation-export miner — parses Claude conversation exports into structured decisions/facts and emits them downstream to Graphiti (temporal graph) and Supermemory (shared bus)",
+  "status": "scaffolded",
+  "activation": "ready-to-run (extraction pass is stdlib-only, no key needed); downstream emit to Graphiti + Supermemory documented but intentionally not wired",
+  "tier": "self-hosted",
+  "purpose": "Purpose: 'When did we decide to migrate from Ontraport?' / 'Show me the raw 45-min debate about GHL migration.' Mines the exact words out of Claude transcripts and turns decision/fact statements into graph episodes.",
+  "miner": {
+    "script": "deploy/mempalace/mine_conversations.py",
+    "runtime": "python3 (stdlib only — no pip install required for the extraction pass)",
+    "input": {
+      "convention": "a directory of Claude conversation export files (.json / .jsonl)",
+      "defaultPath": "deploy/mempalace/exports/",
+      "note": "exports/ is gitignored — never commit raw transcripts; they hold private content"
+    },
+    "output": {
+      "file": "mempalace-extract.jsonl",
+      "schema": "one JSON object per item: {timestamp, source_file, type, text, speaker}",
+      "types": ["decision", "fact"]
+    },
+    "heuristics": {
+      "decision_verbs": ["decided", "chose", "will use", "going with", "switched to", "migrated", "migrate from", "let's go with", "we'll use", "settled on", "picked", "opted for"],
+      "fact_markers": ["because", "the reason", "turns out", "note that", "important:", "key insight"]
+    },
+    "flags": ["--help", "--dry-run", "--out <path>"]
+  },
   "backend": {
     "vector_store": "chromadb",
     "database": "sqlite",
     "host": "VPS 1",
-    "api_cost": "zero (self-hosted)"
+    "api_cost": "zero (self-hosted)",
+    "note": "The verbatim-archive backend (chromadb/sqlite via `pip install mempalace`) is a separate, still-planned component. The miner in this repo is the stdlib front-end that produces the structured extract; it does not depend on that backend to run."
   },
   "sources": [
-    "Claude conversation exports",
-    "Telegram conversation logs (via Nova/OpenClaw)",
-    "Agent session transcripts"
+    "Claude conversation exports (claude.ai data export, or Claude Code session transcripts)",
+    "Telegram conversation logs (via Nova/OpenClaw) — future",
+    "Agent session transcripts — future"
   ],
-  "install": "pip install mempalace",
-  "purpose": "Purpose: 'Show me the raw 45-min debate about GHL migration.' When you need the exact words, not the summary."
+  "downstream": {
+    "graphiti": {
+      "descriptor": "memory/graphiti.json",
+      "role": "primary sink — each extracted decision/fact becomes a temporal episode answering 'when did we decide X?'",
+      "status": "sibling scaffold (Neo4j live on VPS1); emit step is documented in deploy/mempalace/README.md, not yet wired"
+    },
+    "supermemory": {
+      "descriptor": "memory/supermemory.json",
+      "role": "secondary sink — extracted items written as documents to the relevant container (aob/builderbee/centaurion)",
+      "status": "bus is live; emit step documented, not yet wired"
+    }
+  },
+  "envRefs": {
+    "SUPERMEMORY_API_KEY": "env:SUPERMEMORY_API_KEY (only for the optional Supermemory emit step; extraction needs no key)",
+    "NEO4J_PASSWORD": "env:NEO4J_PASSWORD (only for the optional Graphiti emit step)",
+    "apiKeyPath": "/root/Centaurion/.env (gitignored, 600 perms)"
+  },
+  "verifiedRoundTrip": false,
+  "notes": "SCAFFOLD. The extraction pass is real and runnable today with zero dependencies — point the miner at a directory of Claude exports and it writes mempalace-extract.jsonl. The downstream emit to Graphiti/Supermemory is documented in deploy/mempalace/README.md but intentionally NOT fabricated here (no live round-trip claimed). Mirrors the documented-integration pattern of memory/infranodus.json. NO secrets in this file."
 }
