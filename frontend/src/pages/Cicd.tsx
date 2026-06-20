@@ -1,101 +1,144 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Play, AlertCircle, RefreshCw } from 'lucide-react'
 
-const pipelines = [
-  {
-    id: 'pipe-001',
-    name: 'Production Deploy',
-    status: 'success',
-    last_run: '2026-03-13T08:00:00Z',
-    duration: '4m 32s',
-    branch: 'main'
-  },
-  {
-    id: 'pipe-002',
-    name: 'Staging Deploy',
-    status: 'running',
-    last_run: '2026-03-13T11:00:00Z',
-    progress: 78,
-    branch: 'develop'
-  },
-  {
-    id: 'pipe-003',
-    name: 'Integration Tests',
-    status: 'success',
-    last_run: '2026-03-13T07:30:00Z',
-    duration: '12m 15s',
-    branch: 'main'
-  },
-  {
-    id: 'pipe-004',
-    name: 'Security Scan',
-    status: 'failed',
-    last_run: '2026-03-12T22:00:00Z',
-    duration: '8m 45s',
-    error: '2 medium vulnerabilities found',
-    branch: 'main'
-  }
-]
+interface Pipeline {
+  id: string
+  name: string
+  status: string
+  branch: string
+}
 
-const healthServices = [
-  { name: 'API', status: 'healthy', latency: '12ms' },
-  { name: 'Database', status: 'healthy', latency: '8ms' },
-  { name: 'Cache', status: 'healthy', latency: '2ms' },
-  { name: 'AI Service', status: 'healthy', latency: '145ms' },
-  { name: 'External APIs', status: 'degraded', latency: '320ms' }
-]
+interface PipelinesResponse {
+  pipelines: Pipeline[]
+  total: number
+}
+
+interface HealthService {
+  name: string
+  status: string
+  detail?: string
+  last_run?: string
+}
+
+interface HealthStatus {
+  status: string
+  services: HealthService[]
+  last_check: string
+}
+
+// Treat these statuses as "good" (green dot / success styling).
+function isHealthy(status: string): boolean {
+  return status === 'operational' || status === 'configured' || status === 'healthy'
+}
 
 export default function Cicd() {
+  const [pipelines, setPipelines] = useState<Pipeline[]>([])
+  const [pipelinesLoaded, setPipelinesLoaded] = useState(false)
+  const [health, setHealth] = useState<HealthStatus | null>(null)
   const [triggering, setTriggering] = useState<string | null>(null)
-  
+
+  const loadPipelines = () => {
+    fetch('/api/cicd/pipelines')
+      .then(res => res.json())
+      .then((data: PipelinesResponse) => {
+        setPipelines(Array.isArray(data.pipelines) ? data.pipelines : [])
+        setPipelinesLoaded(true)
+      })
+      .catch(() => {
+        setPipelines([])
+        setPipelinesLoaded(true)
+      })
+  }
+
+  const loadHealth = () => {
+    fetch('/api/cicd/health')
+      .then(res => res.json())
+      .then((data: HealthStatus) => setHealth(data))
+      .catch(() => setHealth(null))
+  }
+
+  useEffect(() => {
+    loadPipelines()
+    loadHealth()
+  }, [])
+
+  const handleRefresh = () => {
+    loadPipelines()
+    loadHealth()
+  }
+
   const handleTrigger = (pipelineId: string) => {
     setTriggering(pipelineId)
-    setTimeout(() => setTriggering(null), 2000)
+    fetch('/api/cicd/trigger', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipeline_id: pipelineId })
+    })
+      .then(res => res.json())
+      .catch(() => undefined)
+      .finally(() => setTimeout(() => setTriggering(null), 1500))
   }
-  
+
+  const services = health?.services ?? []
+
   return (
     <>
       <div className="section-header">
         <h2 className="section-title">CI/CD Automation</h2>
-        <button className="btn btn-primary">
+        <button className="btn btn-primary" onClick={handleRefresh}>
           <RefreshCw size={18} />
           Refresh Status
         </button>
       </div>
-      
+
       <div className="card" style={{ marginBottom: '24px' }}>
         <div className="card-header">
           <h3 className="card-title">
             <AlertCircle className="card-title-icon" size={20} />
             System Health
           </h3>
+          {health && (
+            <span className={`status-badge ${isHealthy(health.status) ? 'success' : 'queued'}`}>
+              {health.status}
+            </span>
+          )}
         </div>
         <div className="card-body">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
-            {healthServices.map((service, index) => (
-              <div key={index} style={{ 
-                padding: '16px', 
-                background: 'var(--bg-tertiary)', 
-                borderRadius: '12px',
-                textAlign: 'center'
-              }}>
-                <div style={{ 
-                  width: '12px', 
-                  height: '12px', 
-                  borderRadius: '50%', 
-                  background: service.status === 'healthy' ? '#4ade80' : 'var(--accent-gold)',
-                  margin: '0 auto 8px'
-                }} />
-                <div style={{ fontWeight: 500, marginBottom: '4px' }}>{service.name}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
-                  {service.latency}
+          {services.length === 0 ? (
+            <div style={{ color: 'var(--text-tertiary)', padding: '8px' }}>
+              {health ? 'No services reported' : 'Loading health…'}
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${Math.min(services.length, 5)}, 1fr)`,
+              gap: '16px'
+            }}>
+              {services.map((service, index) => (
+                <div key={index} style={{
+                  padding: '16px',
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    background: isHealthy(service.status) ? '#4ade80' : 'var(--accent-gold)',
+                    margin: '0 auto 8px'
+                  }} />
+                  <div style={{ fontWeight: 500, marginBottom: '4px' }}>{service.name}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
+                    {service.detail || service.status}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
-      
+
       <div className="card">
         <div className="card-header">
           <h3 className="card-title">
@@ -110,42 +153,26 @@ export default function Cicd() {
                 <th>Pipeline</th>
                 <th>Branch</th>
                 <th>Status</th>
-                <th>Last Run</th>
-                <th>Duration</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
+              {pipelines.length === 0 && (
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '32px' }}>
+                    {pipelinesLoaded ? 'No pipelines configured' : 'Loading pipelines…'}
+                  </td>
+                </tr>
+              )}
               {pipelines.map(pipe => (
                 <tr key={pipe.id}>
                   <td>
                     <div style={{ fontWeight: 500 }}>{pipe.name}</div>
-                    {pipe.error && (
-                      <div style={{ fontSize: '0.8rem', color: 'var(--accent-crimson)', marginTop: '4px' }}>
-                        {pipe.error}
-                      </div>
-                    )}
-                    {pipe.progress && (
-                      <div style={{ 
-                        height: '4px', 
-                        background: 'var(--bg-hover)', 
-                        borderRadius: '2px', 
-                        marginTop: '8px',
-                        overflow: 'hidden'
-                      }}>
-                        <div style={{ 
-                          height: '100%', 
-                          width: `${pipe.progress}%`,
-                          background: 'var(--accent-gold)',
-                          borderRadius: '2px'
-                        }} />
-                      </div>
-                    )}
                   </td>
                   <td>
-                    <span style={{ 
-                      padding: '4px 8px', 
-                      background: 'var(--bg-tertiary)', 
+                    <span style={{
+                      padding: '4px 8px',
+                      background: 'var(--bg-tertiary)',
                       borderRadius: '4px',
                       fontSize: '0.8rem',
                       fontFamily: 'var(--font-mono)'
@@ -158,14 +185,8 @@ export default function Cicd() {
                       {pipe.status}
                     </span>
                   </td>
-                  <td style={{ color: 'var(--text-secondary)' }}>
-                    {new Date(pipe.last_run).toLocaleString()}
-                  </td>
-                  <td style={{ fontFamily: 'var(--font-mono)' }}>
-                    {pipe.duration || 'Running...'}
-                  </td>
                   <td>
-                    <button 
+                    <button
                       className="btn btn-secondary btn-sm"
                       onClick={() => handleTrigger(pipe.id)}
                       disabled={triggering === pipe.id}
