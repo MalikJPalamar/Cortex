@@ -58,16 +58,19 @@
 - [~] Graphiti installed and connected via MCP — **scaffolded** (#87): `memory/graphiti.json`
   + `deploy/graphiti/` (runbook, mcp.json, connection test, temporal-tracking doc). Needs
   operator: `NEO4J_PASSWORD` + LLM key in host `.env`, then `pip install graphiti-core`.
-- [~] Temporal entity tracking — documented via Graphiti bi-temporal edges (`deploy/graphiti/temporal-tracking.md`); live once Graphiti is activated.
-- [~] MemPalace — Claude conversation exports mined — **runnable miner** (#88):
-  `deploy/mempalace/mine_conversations.py` (stdlib, extracts timestamped decisions/facts
-  → `mempalace-extract.jsonl`, ready to feed Graphiti+Supermemory).
+- [x] Temporal entity tracking — **PROVEN end-to-end** (#90): `deploy/graphiti/prove-dod.sh`
+  spins up an ephemeral Neo4j, loads bi-temporal `(:Decision)` nodes (valid-time +
+  transaction-time), and answers the DoD query against a REAL graph. (Shared Neo4j untouched.)
+- [x] MemPalace — Claude conversation exports mined — **runnable + validated** (#88, #92):
+  miner hardened against real host transcripts (48 files → 306 deduped items, confidence-tiered,
+  0 false malformed warnings); synthetic fixture reproduces the Ontraport decision at conf 0.9.
 
 **Definition of Done:** Agent answers "When did we decide to migrate from Ontraport?" from Graphiti.
-**Status note (2026-06-20):** Neo4j live; Graphiti + MemPalace scaffolded and runnable.
-Two operator steps gate full activation: NEO4J_PASSWORD + an LLM key in the host `.env`.
-The MemPalace miner already extracts the exact Ontraport-decision record from a sample
-export — once Graphiti is keyed, ingesting it satisfies the DoD.
+**Status (2026-06-20): DoD MECHANISM PROVEN.** The full chain works on real components today:
+MemPalace mines the timestamped decision → loaded as bi-temporal nodes in a real Neo4j →
+the query returns *"Decided to migrate from Ontraport on 2026-03-02."* (#90 transcript).
+The ONLY gap to "live in production" is an LLM key so Graphiti auto-extracts records from
+conversations instead of the proof's hand-load — i.e. operator adds NEO4J_PASSWORD + LLM key.
 
 ---
 
@@ -109,6 +112,13 @@ export — once Graphiti is keyed, ingesting it satisfies the DoD.
 - [x] **PT-8 Backend hardening (CORS + security headers)** 🤖 (#86). CORS locked to an
   env-driven allowlist (no `*`+credentials); security headers (CSP, X-Frame-Options DENY,
   nosniff, Referrer-Policy) on every response. Multi-user auth deliberately OUT of scope.
+- [x] **PT-9 Wire all dashboard pages to real APIs** 🤖 (#89). AIOperations, Cicd, Settings,
+  MarketIntelligence were client-side mock; now all fetch real endpoints with graceful
+  empty/unconfigured states. The entire dashboard is real-data, front to back.
+- [x] **PT-10 Backend observability + rate limiting + non-root Docker** 🤖 (#91). Structured
+  per-request logging to stdout, in-process per-IP rate limit (120/min, `/api/health` exempt,
+  429 on exceed), `/api/health/ready`, and the container runs as non-root `appuser` (uid 10001)
+  with a HEALTHCHECK. Anti-abuse, NOT auth (multi-user still out of scope).
 
 ### P3 — Phase 9 infra remainder
 - [ ] **PT-7** Syncthing (VPS1↔VPS2 wiki sync), InfraNodus MCP (gap analysis),
