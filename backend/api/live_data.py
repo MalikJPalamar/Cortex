@@ -58,11 +58,17 @@ def _fetch_raw(rel: str):
     if cached and cached[0] > now:
         return cached[1]
     text = None
+    url = f"{_RAW_BASE}/{rel}"
+    # Hard-enforce https:// before opening — refuses file://, ftp://, or any
+    # custom scheme even if _RAW_BASE were misconfigured (closes bandit B310).
+    if not url.startswith("https://"):
+        _cache[rel] = (now + _FETCH_TTL, None)
+        return None
     try:
         req = urllib.request.Request(
-            f"{_RAW_BASE}/{rel}", headers={"User-Agent": "centaurion-dashboard"}
+            url, headers={"User-Agent": "centaurion-dashboard"}
         )
-        with urllib.request.urlopen(req, timeout=_FETCH_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=_FETCH_TIMEOUT) as resp:  # nosec B310 — scheme pinned to https above
             if resp.status == 200:
                 text = resp.read().decode("utf-8")
     except Exception:
