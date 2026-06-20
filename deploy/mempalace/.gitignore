@@ -1,0 +1,4 @@
+# Never commit raw conversation exports or the generated extract.
+exports/*
+!exports/.gitkeep
+mempalace-extract.jsonl
