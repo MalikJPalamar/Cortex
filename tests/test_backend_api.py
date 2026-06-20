@@ -33,6 +33,62 @@ def test_health_endpoint():
     assert resp.json()["status"] == "healthy"
 
 
+# ---- Security hardening: headers + CORS lockdown (single-operator, no auth) ----
+
+_EXPECTED_SECURITY_HEADERS = {
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "x-xss-protection": "0",
+}
+
+
+def _assert_security_headers(resp):
+    for header, value in _EXPECTED_SECURITY_HEADERS.items():
+        assert resp.headers.get(header) == value, f"bad/missing {header}"
+    csp = resp.headers.get("content-security-policy", "")
+    assert "default-src 'self'" in csp
+    assert "script-src 'self'" in csp
+    # HSTS deliberately not set by the app — Render terminates TLS.
+    assert "strict-transport-security" not in resp.headers
+
+
+def test_security_headers_on_health():
+    _assert_security_headers(client.get("/api/health"))
+
+
+def test_security_headers_on_root(tmp_path, monkeypatch):
+    # The SPA index is served via FileResponse; headers must still be attached.
+    # In CI the built dist lives at /app/frontend/dist (created at deploy time),
+    # so point the route at a temp index.html to exercise the served-SPA path.
+    import main
+
+    index = tmp_path / "index.html"
+    index.write_text("<!doctype html><title>t</title>")
+    monkeypatch.setattr(main, "FRONTEND_DIR", str(tmp_path))
+    resp = client.get("/")
+    assert resp.status_code == 200
+    _assert_security_headers(resp)
+
+
+def test_cors_allows_configured_origin():
+    origin = "https://centaurion.onrender.com"
+    resp = client.get("/api/health", headers={"Origin": origin})
+    assert resp.status_code == 200
+    assert resp.headers.get("access-control-allow-origin") == origin
+    # Credentials are only safe with an explicit origin, never with "*".
+    assert resp.headers.get("access-control-allow-origin") != "*"
+
+
+def test_cors_rejects_unknown_origin():
+    resp = client.get("/api/health", headers={"Origin": "https://evil.example.com"})
+    assert resp.status_code == 200  # request still served; CORS is browser-enforced
+    # A disallowed origin must NOT be echoed and must NOT receive a wildcard.
+    acao = resp.headers.get("access-control-allow-origin")
+    assert acao != "*"
+    assert acao != "https://evil.example.com"
+
+
 def test_dashboard_stats_endpoint():
     resp = client.get("/api/dashboard/stats")
     assert resp.status_code == 200
