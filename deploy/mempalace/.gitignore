@@ -2,3 +2,7 @@
 exports/*
 !exports/.gitkeep
 mempalace-extract.jsonl
+
+# The sample/ dir is SYNTHETIC and intentionally tracked (it contains no real
+# conversation content). Generated demo output is not.
+mempalace-demo-*.jsonl

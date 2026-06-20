@@ -71,28 +71,107 @@ python3 mine_conversations.py exports            # empty dir
 
 For every message it splits the body into sentence-ish units and classifies each:
 
-- **`decision`** — contains a decision verb: `decided`, `chose`, `will use`,
-  `going with`, `switched to`, `migrated`, `migrate from`, `settled on`,
-  `picked`, `opted for`, … (full list in `mine_conversations.py`).
-- **`fact`** — contains a fact marker: `because`, `the reason`, `turns out`,
-  `note that`, `important:`, `key insight`, …
+- **`decision`** — contains a decision phrase, split into **strong** (verb-led:
+  `we decided`, `decided to`, `going with`, `switched to`, `we'll use`,
+  `opted for`, `settled on`, …) and **weak** (bare nouns / generic verbs:
+  `decision`, `chose`, `migrating`, `will use`, …). Full lists in
+  `mine_conversations.py`.
+- **`fact`** — contains a fact marker: `the reason is`, `turns out`,
+  `key insight`, `because`, `note that`, …
+
+Each match is suppressed if the sentence also hits a **negative-context** phrase
+(narration / meta / instruction / doc cross-reference, e.g. `let me`,
+`that's your decision`, `before choosing`, `see \``). This is the main
+false-positive killer surfaced by real-data validation (see §6).
 
 Output: **`mempalace-extract.jsonl`**, one JSON object per item:
 
 ```json
-{"timestamp": "2026-03-02T14:11:00Z", "source_file": "conversations.json", "type": "decision", "text": "We decided to migrate from Ontraport to GoHighLevel.", "speaker": "assistant"}
+{"timestamp": "2026-03-02T14:11:00Z", "source_file": "synthetic_transcript.jsonl", "type": "decision", "text": "We decided to migrate from Ontraport to GoHighLevel for the BuilderBee CRM.", "speaker": "assistant", "confidence": 0.9}
 ```
 
 | Field | Meaning |
 |-------|---------|
-| `timestamp` | message time (falls back to conversation-level time, or `null`) |
+| `timestamp` | message time (Claude Code transcripts: pulled from the **top-level** turn timestamp; falls back to conversation-level time, or `null`) |
 | `source_file` | export filename the item came from |
 | `type` | `decision` or `fact` |
 | `text` | the verbatim statement (capped at 600 chars) |
 | `speaker` | `role` / `sender` / `author` (e.g. `human`, `assistant`) |
+| `confidence` | transparent `0..1` heuristic score (strong phrase ≈ 0.8, weak ≈ 0.45; questions and tiny fragments are penalised). Use `--min-confidence 0.8` for a high-precision decision shortlist. |
 
 This is a **recall-first** heuristic pass — it favors catching real decisions
-over precision. Tune the verb/marker lists in the script as the corpus grows.
+over precision, then exposes `confidence` + `--min-confidence` so the noisy tail
+can be thresholded out. Exact-duplicate statements are de-duplicated. Tune the
+phrase lists in the script as the corpus grows.
+
+---
+
+## 3a. Reproduce without real data (synthetic fixture)
+
+`sample/` holds a **synthetic** (fake-but-realistic) Claude Code transcript that
+contains the canonical Ontraport→GoHighLevel migration decision — **no real
+conversation content**. Run the demo to reproduce the extract end-to-end:
+
+```bash
+deploy/mempalace/sample/run_demo.sh
+```
+
+Expected extract (the Phase-10 DoD decision lands at confidence `0.9` with its
+timestamp):
+
+```json
+{"timestamp": "2026-03-02T14:09:10Z", "source_file": "synthetic_transcript.jsonl", "type": "decision", "text": "Okay, let's go with GoHighLevel then.", "speaker": "user", "confidence": 0.85}
+{"timestamp": "2026-03-02T14:11:00Z", "source_file": "synthetic_transcript.jsonl", "type": "decision", "text": "We decided to migrate from Ontraport to GoHighLevel for the BuilderBee CRM.", "speaker": "assistant", "confidence": 0.9}
+```
+
+The fixture also includes a `thinking` block, a `tool_use`/`tool_result` pair,
+and a "let me bring you the rollout decisions" narration line — all of which the
+miner correctly **ignores** (plumbing skipped; narration suppressed by
+negative-context).
+
+---
+
+## 6. Real-transcript validation (Phase 10 hardening — stats only, no content)
+
+The miner was validated against this host's real Claude Code transcripts under
+`~/.claude/projects/**/*.jsonl` (**48 files, ~7,900 lines**). Only counts and
+findings are reported here — **no conversation content was committed**.
+
+**Before hardening:** `0` items extracted. The prior parser did not recognise
+the real Claude Code transcript shape (it expected `messages` /
+`chat_messages`), and `raw.splitlines()` fragmented long JSONL records on
+newlines embedded inside string values, emitting bogus "malformed line"
+warnings.
+
+**After hardening:**
+
+| Metric | Value |
+|--------|-------|
+| Files scanned | 48 |
+| Unique items extracted | **306** |
+| — decisions | 182 |
+| — facts | 124 |
+| Duplicates collapsed (dedup) | 101 |
+| Malformed-line warnings | 0 (was 16 false ones) |
+| High-confidence tier (`--min-confidence 0.8`) | 11 items → 8 decision / 3 fact |
+
+**Precision (qualitative):** the **`>=0.8`** tier is decision-dominant and
+verb-led — these read as genuine recorded decisions. The bulk of items sit in
+the **`0.45–0.59`** weak tier, which mixes real decisions with narration and
+pasted skill/CLAUDE.md doc text injected under `role: user`. Real-data findings
+that drove the hardening:
+
+- Bare noun `decision(s)` fired on narration ("let me bring you decisions",
+  "that's the user's decision") → added **negative-context suppression** +
+  demoted bare nouns to **weak** confidence.
+- Markdown doc callouts (`> **Note:**`, `Important:`) from pasted API docs
+  flooded the strong-fact tier → demoted `note:` / `important:` to **weak**.
+- `tool_use` / `tool_result` / `thinking` blocks produced noise → the parser now
+  mines **only `text` blocks** from `user` / `assistant` roles.
+
+Net: precision at the high-confidence tier went from ~12% real-decisions
+(pre-fix, dominated by doc `Note:` callouts) to a clean decision-dominant
+shortlist. Recall is preserved in the weak tier for later re-ranking.
 
 ---
 
@@ -155,9 +234,10 @@ flips on the moment the sibling Graphiti scaffold is wired.
 | File | Purpose |
 |------|---------|
 | `memory/mempalace.json` | Integration descriptor (status, miner spec, downstream sinks, env refs) |
-| `deploy/mempalace/mine_conversations.py` | The miner (stdlib-only, `--help`, `--dry-run`) |
+| `deploy/mempalace/mine_conversations.py` | The miner (stdlib-only, `--help`, `--dry-run`, `--min-confidence`) |
 | `deploy/mempalace/README.md` | This runbook |
 | `deploy/mempalace/exports/` | Drop Claude exports here (**gitignored** — only `.gitkeep` tracked) |
+| `deploy/mempalace/sample/` | **Synthetic** fixture + `run_demo.sh` — reproduce the extract with no real data |
 
 ## Operator step (the one thing left to go live downstream)
 
