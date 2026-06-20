@@ -1,17 +1,28 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from api.routes import router
 from security import SecurityHeadersMiddleware, get_allowed_origins
+from observability import RateLimitMiddleware, RequestLoggingMiddleware
 import os
+import time
+
+APP_VERSION = "1.0.0"
+
+# Captured at import time so /api/health can report process uptime cheaply,
+# without touching any external dependency.
+_START_TIME = time.monotonic()
 
 app = FastAPI(
     title="Centaurion",
     description="AI-Driven Cognitive Operating System",
-    version="1.0.0"
+    version=APP_VERSION
 )
 
 FRONTEND_DIR = "/app/frontend/dist"
+# State dir baked into the image (Dockerfile COPY memory/). The readiness probe
+# confirms the live-data backing files are present before declaring ready.
+STATE_DIR = "/app/memory"
 
 # Single-operator dashboard, served same-origin. CORS is an explicit allowlist
 # (env-driven via CENTAURION_ALLOWED_ORIGINS) — never a wildcard, which is both
@@ -27,11 +38,38 @@ app.add_middleware(
 # Defensive security headers on every response (nosniff, frame deny, CSP, ...).
 app.add_middleware(SecurityHeadersMiddleware)
 
+# Anti-abuse per-IP rate limiter (NOT auth). Exempts /api/health so keep-warm
+# pings are never throttled. Limit is env-configurable.
+app.add_middleware(RateLimitMiddleware)
+
+# Structured one-line-per-request access log to stdout (Render captures it).
+# Added last so it is the outermost middleware and times the full request.
+app.add_middleware(RequestLoggingMiddleware)
+
 app.include_router(router, prefix="/api")
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy", "version": "1.0.0"}
+    # Fast, dependency-free. Reports process uptime + version for observability.
+    return {
+        "status": "healthy",
+        "version": APP_VERSION,
+        "uptime_seconds": round(time.monotonic() - _START_TIME, 2),
+    }
+
+@app.get("/api/health/ready")
+async def readiness_check():
+    # Confirms the served frontend bundle and state dir are present. Returns 503
+    # when a backing resource is missing so orchestration can hold traffic.
+    checks = {
+        "frontend_dist": os.path.isdir(FRONTEND_DIR),
+        "state_dir": os.path.isdir(STATE_DIR),
+    }
+    ready = all(checks.values())
+    return JSONResponse(
+        status_code=200 if ready else 503,
+        content={"status": "ready" if ready else "not_ready", "checks": checks},
+    )
 
 @app.get("/")
 async def serve_index():
