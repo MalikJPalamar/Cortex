@@ -1,0 +1,27 @@
+{
+  "_comment": "Graphiti MCP server for the Phase 10 temporal knowledge graph. SCAFFOLD — needs an LLM key (GRAPHITI_LLM_API_KEY → OPENAI_API_KEY or ANTHROPIC_API_KEY) to activate; Neo4j is already live on this host. The Graphiti MCP server (getzep/graphiti, mcp_server/) speaks HTTP by default at http://localhost:8000/mcp/ ; Claude Code reaches it through the `mcp-remote` bridge. Secrets are env-refs read from the host environment, NOT hardcoded. See deploy/graphiti/README.md.",
+
+  "_option_a_http_bridge": "Use this entry once `uv run main.py --transport http` (or `docker compose up`) is running in deploy/graphiti's checkout of the graphiti mcp_server. Merge into the host Claude Code MCP config (~/.claude.json or a project .mcp.json).",
+  "mcpServers": {
+    "graphiti-memory": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:8000/mcp/"]
+    }
+  },
+
+  "_option_b_stdio_direct": "Alternative: run the server in stdio mode directly under Claude Code (no separate process / no mcp-remote). Replace the block above with this and point `cwd` at your local checkout of getzep/graphiti's mcp_server. Env-refs resolve from the host .env exported into the shell.",
+  "_mcpServers_stdio": {
+    "graphiti-memory": {
+      "command": "uv",
+      "args": ["run", "main.py", "--transport", "stdio"],
+      "cwd": "/root/graphiti/mcp_server",
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "${NEO4J_PASSWORD}",
+        "OPENAI_API_KEY": "${GRAPHITI_LLM_API_KEY}",
+        "MODEL_NAME": "gpt-4o-mini"
+      }
+    }
+  }
+}

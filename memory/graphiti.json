@@ -1,17 +1,61 @@
 {
   "service": "graphiti",
-  "description": "Layer 2b: Temporal knowledge graph — tracks how facts and relationships change over time",
-  "status": "planned_month_2",
+  "description": "Layer 2a: Temporal knowledge graph — bi-temporal entity/relationship tracking over a live Neo4j. Answers 'when did X become true?' and 'how did Y evolve?' (getzep/graphiti).",
+  "status": "scaffolded",
+  "activation": "pending-key",
   "neo4j": {
-    "uri": "bolt://187.124.45.132:7687",
+    "uri": "bolt://localhost:7687",
+    "httpUri": "http://localhost:7474",
     "user": "neo4j",
-    "password": "REPLACE_WITH_ACTUAL_PASSWORD",
+    "password": "${NEO4J_PASSWORD}",
+    "passwordSource": "env:NEO4J_PASSWORD",
+    "passwordLocation": "host .env (gitignored, 600 perms); the live value currently lives in the neo4j container's NEO4J_AUTH",
     "deployment": "docker",
-    "host": "VPS 1"
+    "container": "neo4j",
+    "host": "Hermes (srv1514399)",
+    "verified": {
+      "running": true,
+      "image": "neo4j:5",
+      "version": "5.26.23",
+      "edition": "community",
+      "httpStatus": 200,
+      "checkedAt": "2026-06-20",
+      "note": "Read-only reachability check via deploy/graphiti/test-connection.sh; no graph data mutated."
+    }
+  },
+  "llm": {
+    "provider": "openai-or-anthropic",
+    "purpose": "entity + relationship extraction from each episode (required — Graphiti cannot build the graph without an LLM)",
+    "apiKey": "${GRAPHITI_LLM_API_KEY}",
+    "apiKeySource": "env:GRAPHITI_LLM_API_KEY",
+    "apiKeyPath": "/root/Centaurion/.env (gitignored, 600 perms)",
+    "notes": "Set ONE provider key. The MCP server reads OPENAI_API_KEY by default; for Anthropic set ANTHROPIC_API_KEY and MODEL_NAME accordingly. GRAPHITI_LLM_API_KEY is the repo-side env-ref that maps to whichever provider you choose."
   },
   "mcp": {
-    "port": 8765,
-    "notes": "All agents (Claude Code, OpenClaw, pi) connect to same Neo4j instance via MCP"
+    "server": "graphiti-memory",
+    "package": "getzep/graphiti — mcp_server/ (run via `uv run main.py` or docker compose)",
+    "configFile": "deploy/graphiti/mcp.json",
+    "transport": "http (default, http://localhost:8000/mcp/) bridged to Claude Code via mcp-remote, or stdio",
+    "defaultHttpPort": 8000,
+    "envVars": ["NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD", "OPENAI_API_KEY (or ANTHROPIC_API_KEY)", "MODEL_NAME"],
+    "tools": [
+      "add_memory",
+      "add_episode",
+      "search_nodes",
+      "search_facts",
+      "get_episodes"
+    ],
+    "notes": "All agents (Claude Code, OpenClaw, pi) point at the SAME Neo4j, so the temporal graph is shared. The graphiti-core Python lib (`pip install graphiti-core`) is the equivalent integration if MCP is not wired."
+  },
+  "biTemporal": {
+    "model": "Each fact/edge carries two time axes: when it was TRUE in the world and when the system LEARNED it.",
+    "edgeFields": {
+      "valid_at": "when the fact became true in the world",
+      "invalid_at": "when the fact stopped being true / was superseded (null if still current)",
+      "created_at": "when Graphiti derived/recorded the fact",
+      "expired_at": "administrative expiration timestamp"
+    },
+    "why": "Lets the graph answer point-in-time and 'how did this evolve' questions without overwriting history — superseded edges are invalidated, not deleted."
   },
   "entities": {
     "people": ["Malik", "Anthony", "Chrissy", "Anna", "Renārs", "Amy", "Tania", "Katerina", "Moni"],
@@ -19,5 +63,7 @@
     "ventures": ["AOB", "BuilderBee", "Centaurion"],
     "concepts": ["FEP", "Markov Blanket", "Active Inference", "Three Laws", "Routing Gate", "Precision Ratio"]
   },
-  "purpose": "Answers questions the other tools can't: 'When did we first decide to migrate from Ontraport?' 'How has Anna's role evolved over the last 6 months?' 'What's the relationship between the GHL evaluation and the B2B pivot decision?'"
+  "verifiedRoundTrip": false,
+  "purpose": "Phase 10 DoD: the agent can answer 'When did we decide to migrate from Ontraport?' and 'How has Anna's role evolved?' — questions Supermemory (recall) and InfraNodus (topology) can't, because they need the time axis on relationships.",
+  "notes": "SCAFFOLD ONLY — Neo4j is live, but no LLM key is present so no graph has been built. Two operator steps activate it: (1) put NEO4J_PASSWORD in host .env, (2) add an LLM key (GRAPHITI_LLM_API_KEY → OPENAI_API_KEY or ANTHROPIC_API_KEY). See deploy/graphiti/README.md. Mirrors the documented-integration pattern of memory/supermemory.json and memory/infranodus.json. No real secrets in this file."
 }
