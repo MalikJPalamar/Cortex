@@ -346,6 +346,105 @@ def get_pipelines() -> dict:
     return {"pipelines": pipelines, "total": len(pipelines)}
 
 
+def _sa_scan_state() -> dict:
+    """Genuine SA Lens scan state if a scan file is present on disk, else {}.
+
+    The SA-scan skill (skills/sa-scan) interfaces with the external
+    situational-awareness-lens repo; when a scan run lands committed state here,
+    surface it. We probe the conventional locations and never fabricate a result
+    if none exists.
+    """
+    for rel in (
+        "memory/state/sa-scan.json",
+        "memory/state/market-intelligence.json",
+        "memory/state/work/sa-scan.json",
+    ):
+        data = _read_json(rel)
+        if data:
+            return data
+    return {}
+
+
+def _tracked_tickers() -> list:
+    """Real tracked tickers from on-disk scan state — never invented.
+
+    Prefers a committed scan file's ticker list; otherwise empty. The skill doc
+    says "18 tickers" but defers the concrete list to the external repo, so we do
+    NOT hardcode symbols here — an empty list is the honest answer until a scan
+    file lands.
+    """
+    scan = _sa_scan_state()
+    tickers = scan.get("tracked_tickers") or scan.get("tickers")
+    if isinstance(tickers, list):
+        return [str(t) for t in tickers if t]
+    return []
+
+
+def get_market_intelligence() -> dict:
+    """Honest market intelligence — real SA-scan state if present, else unconfigured.
+
+    There is NO live market data feed wired into this deployment (no price API key
+    is embedded). Rather than fabricate bullish/bearish sentiment and percentages,
+    this returns a truthful shape: if a genuine SA Lens scan file exists on disk we
+    surface its sectors/tickers; otherwise status="unconfigured" with empty data.
+
+    The frontend (frontend/src/pages/MarketIntelligence.tsx) renders sectors,
+    trends, and competitors, so those keys are always present (empty when there is
+    no real data) to keep the page from crashing.
+    """
+    scan = _sa_scan_state()
+    tracked = _tracked_tickers()
+
+    if scan:
+        # A real scan landed — surface only what it actually contains, defaulting
+        # any missing collection to empty rather than inventing it.
+        sectors = scan.get("sectors") if isinstance(scan.get("sectors"), list) else []
+        trends = scan.get("trends") if isinstance(scan.get("trends"), list) else []
+        competitors = (
+            scan.get("competitors")
+            if isinstance(scan.get("competitors"), list)
+            else []
+        )
+        return {
+            "status": "live",
+            "message": "Situational Awareness scan",
+            "sectors": sectors,
+            "trends": trends,
+            "competitors": competitors,
+            "tracked_tickers": tracked,
+            "generated_at": scan.get("generated_at")
+            or scan.get("timestamp")
+            or datetime.now(timezone.utc).isoformat(),
+            "source": "sa-lens",
+        }
+
+    return {
+        "status": "unconfigured",
+        "message": "No live market feed connected",
+        "sectors": [],
+        "trends": [],
+        "competitors": [],
+        "tracked_tickers": tracked,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "source": "none",
+    }
+
+
+def generate_report(request: dict) -> dict:
+    """Honest 'not configured' report response — no fabricated report is produced.
+
+    Report generation needs a live market/research backend that is not wired into
+    this deployment, so we return a truthful unconfigured status instead of faking
+    a "generating" job that will never complete.
+    """
+    return {
+        "status": "unconfigured",
+        "message": "Report generation is not configured — no live data backend connected",
+        "type": str((request or {}).get("type", "summary")),
+        "source": "none",
+    }
+
+
 def get_settings() -> dict:
     """Real configuration summary — repo identity + memory service status.
 
