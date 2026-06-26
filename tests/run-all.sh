@@ -30,8 +30,11 @@ run_phase() {
 
   echo "$OUTPUT"
 
-  P_PASS=$(echo "$OUTPUT" | grep -c "  ✓" || true)
-  P_FAIL=$(echo "$OUTPUT" | grep -c "  ✗" || true)
+  # Count only genuine pass()/fail() result lines, not each script's footer
+  # summary line ("  ✓ ALL …" / "  ✗ <N> … PENDING|FAILED"). Footer summaries
+  # start with "ALL" or a digit; real assertions start with an Rxx.x id.
+  P_PASS=$(echo "$OUTPUT" | grep "  ✓" | grep -vc "  ✓ ALL " || true)
+  P_FAIL=$(echo "$OUTPUT" | grep "  ✗" | grep -vc "  ✗ [0-9]" || true)
   OVERALL_PASS=$((OVERALL_PASS + P_PASS))
   OVERALL_FAIL=$((OVERALL_FAIL + P_FAIL))
 
