@@ -1,13 +1,14 @@
 {
-  "timestamp": "2026-07-03T00:00:00Z",
+  "timestamp": "2026-07-03T04:00:01Z",
   "date": "2026-07-03",
   "status": "blocked_vps_locked",
   "phase": 7,
+  "phase_name": "Production Deployment",
+  "blocker": "R32.4: nanoclaw-agent docker image missing — requires human `bash /root/nanoclaw/container/build.sh` on VPS1 (docker build verb is permission-gated, no in-loop approver)",
   "tests_fixed": 0,
   "tests_remaining": 1,
-  "blocker": "R32.4: nanoclaw-agent docker image not built; requires human `bash /root/nanoclaw/container/build.sh` on VPS1 (docker build is permission-gated for the autonomous loop)",
   "phase7_live": {"pass": 16, "fail": 1, "total": 17},
-  "elapsed_seconds": 0,
+  "consecutive_days_blocked": 7,
   "max_turns": 30,
   "max_fixes": 10
 }
