@@ -1,15 +1,14 @@
 {
-  "timestamp": "2026-07-05T04:00:01Z",
+  "timestamp": "2026-07-05T12:00:01Z",
   "date": "2026-07-05",
   "status": "blocked_vps_locked",
   "phase": 7,
-  "requirement": "R32.4",
-  "blocker": "nanoclaw-agent docker image not built — requires human `bash /root/nanoclaw/container/build.sh` on VPS1 (docker build verb outside loop permissions)",
+  "blocker": "R32.4: NanoClaw agent image not built — requires human `bash /root/nanoclaw/container/build.sh` on VPS1 (docker build is outside the loop's permission gate)",
   "tests_fixed": 0,
   "tests_remaining": 1,
   "phase7_live": {"pass": 16, "fail": 1, "total": 17},
-  "consecutive_days_blocked": 13,
-  "elapsed_seconds": 66,
+  "consecutive_days_blocked": 14,
+  "elapsed_seconds": 71,
   "max_turns": 30,
   "max_fixes": 10
 }
