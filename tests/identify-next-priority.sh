@@ -44,8 +44,16 @@ for i in "${!PHASE_SCRIPTS[@]}"; do
   else
     OUTPUT=""
   fi
-  P=$(echo "$OUTPUT" | grep -c "  ✓" || true)
-  F=$(echo "$OUTPUT" | grep -c "  ✗" || true)
+  # Count genuine per-check result lines only. Each phase script prints a
+  # summary footer that ALSO begins with the ✓/✗ glyph, e.g.
+  #   "  ✓ ALL PHASE 7 REQUIREMENTS PASS" / "  ✓ DEV LOOP INFRASTRUCTURE VERIFIED"
+  #   "  ✗ 1 PHASE 7 REQUIREMENT(S) PENDING"
+  # Counting those footers inflated every phase's tally by one and made the loop
+  # report phantom failures (e.g. R32.4 showed "2 fail" when only 1 check fails).
+  # Exclude footers: pass footers start "✓ ALL "/"✓ DEV LOOP "; fail footers start
+  # "✗ <digit>" (real checks start "✗ R.." or a text description, never a digit).
+  P=$(echo "$OUTPUT" | grep "  ✓" | grep -cvE '^  ✓ (ALL |DEV LOOP )' || true)
+  F=$(echo "$OUTPUT" | grep "  ✗" | grep -cvE '^  ✗ [0-9]' || true)
   PASSES[$i]=$P
   FAILS[$i]=$F
   TOTALS[$i]=$((P + F))
