@@ -28,6 +28,19 @@
 set -uo pipefail
 
 REPO_DIR="${CENTAURION_REPO:-$HOME/Centaurion}"
+
+# Headless auth: cron has no browser, so an interactive `claude login` OAuth
+# session eventually expires and cannot refresh. A long-lived token from
+# `claude setup-token` placed in this file (chmod 600) as
+#   CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+# is picked up by `claude -p` automatically. See deploy/vps1/README.md.
+ENV_FILE="${CENTAURION_ENV_FILE:-/root/.config/centaurion/env}"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
 LOG_DIR="$REPO_DIR/logs"
 LOCK_FILE="$REPO_DIR/logs/.dev-loop.lock"
 STATUS_FILE="$REPO_DIR/memory/state/dev-loop-status.json"
@@ -95,6 +108,7 @@ json_escape() {
 CLAUDE_EXIT=-1
 CLAUDE_ELAPSED=0
 CLAUDE_STDERR_TAIL=""
+ERROR_REASON=""
 CONSECUTIVE_ZERO_FIX_RUNS=$(grep -o '"consecutive_zero_fix_runs": *[0-9]*' "$STATUS_FILE" 2>/dev/null | head -1 | sed 's/.*: *//')
 CONSECUTIVE_ZERO_FIX_RUNS=${CONSECUTIVE_ZERO_FIX_RUNS:-0}
 
@@ -117,6 +131,8 @@ write_status() {
   "claude_exit": $CLAUDE_EXIT,
   "claude_elapsed_seconds": $CLAUDE_ELAPSED,
   "claude_stderr_tail": "$tail_json",
+  "error_reason": "$ERROR_REASON",
+  "auth_source": "$([ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && echo oauth_token_env || echo interactive_login)",
   "consecutive_zero_fix_runs": $CONSECUTIVE_ZERO_FIX_RUNS
 }
 STATUS_JSON
@@ -127,7 +143,12 @@ STATUS_JSON
 publish_state() {
   git add memory/state/dev-loop-status.json memory/state/health-status.json 2>/dev/null || true
   if ! git diff --cached --quiet 2>/dev/null; then
-    git commit -m "chore(dev-loop): status $DATE ($(grep -o '"status": *"[^"]*"' "$STATUS_FILE" | head -1 | sed 's/.*: *"//;s/"//'))" >> "$LOG_FILE" 2>&1 || true
+    local st; st=$(grep -o '"status": *"[^"]*"' "$STATUS_FILE" | head -1 | sed 's/.*: *"//;s/"//')
+    if [ "$st" = "error" ]; then
+      git commit -m "status: dev loop error (${ERROR_REASON:-unknown}) $DATE" >> "$LOG_FILE" 2>&1 || true
+    else
+      git commit -m "status: dev loop $st $DATE" >> "$LOG_FILE" 2>&1 || true
+    fi
   fi
   if [ "$(git log origin/main..HEAD --oneline 2>/dev/null | wc -l)" -gt 0 ]; then
     git push origin main >> "$LOG_FILE" 2>&1 || log "ERROR: git push failed. Will retry on next run."
@@ -157,6 +178,7 @@ log "Pulling latest from main..."
 cd "$REPO_DIR"
 git pull origin main >> "$LOG_FILE" 2>&1 || {
   log "ERROR: git pull failed"
+  ERROR_REASON="git_pull_failed"
   CLAUDE_STDERR_TAIL="git pull origin main failed (see $LOG_FILE)"
   write_status "error" 0 0 0 $(($(date +%s) - START_TIME))
   exit 1
@@ -243,22 +265,35 @@ log "Claude Code exited with: $CLAUDE_EXIT (claude elapsed: ${CLAUDE_ELAPSED}s, 
 # exit, or an auth/login/error signature in the output.
 CLAUDE_FAILED=""
 MIN_CLAUDE_SECONDS=60
-if [ "$CLAUDE_EXIT" -ne 0 ]; then
+if printf '%s' "$CLAUDE_STDERR_TAIL" | grep -qiE 'oauth session expired|oauth token (has )?expired|token expired|failed to authenticate|not logged in|please (run )?/login|login required|invalid api key|authentication[_ ]error|unauthorized'; then
+  CLAUDE_FAILED="auth_expired"
+  ERROR_REASON="auth_expired"
+elif [ "$CLAUDE_EXIT" -eq 127 ]; then
+  CLAUDE_FAILED="claude binary missing"
+  ERROR_REASON="claude_missing"
+elif [ "$CLAUDE_EXIT" -ne 0 ]; then
   CLAUDE_FAILED="exit code $CLAUDE_EXIT"
+  ERROR_REASON="claude_exit_$CLAUDE_EXIT"
 elif [ "$CLAUDE_ELAPSED" -lt "$MIN_CLAUDE_SECONDS" ]; then
   CLAUDE_FAILED="finished in ${CLAUDE_ELAPSED}s (< ${MIN_CLAUDE_SECONDS}s)"
-elif printf '%s' "$CLAUDE_STDERR_TAIL" | grep -qiE 'not logged in|please (run )?/login|login required|invalid api key|authentication[_ ]error|oauth token (has )?expired|token expired|unauthorized|credit balance|rate limit|usage limit|"is_error": *true|^error:|command not found'; then
-  CLAUDE_FAILED="auth/error signature in output"
+  ERROR_REASON="instant_exit"
+elif printf '%s' "$CLAUDE_STDERR_TAIL" | grep -qiE 'credit balance|rate limit|usage limit|"is_error": *true|^error:'; then
+  CLAUDE_FAILED="error signature in output"
+  ERROR_REASON="error_signature"
 fi
 if [ -n "$CLAUDE_FAILED" ]; then
   log "ERROR: Claude run looks broken: $CLAUDE_FAILED"
 fi
 
-# Step 4: Commit any uncommitted changes Claude left behind
-if [ -n "$(git status --porcelain)" ]; then
+# Step 4: Commit any uncommitted changes Claude left behind — only when the
+# Claude run actually succeeded. A failed run leaves nothing worth a
+# "fix(...)" commit; its status is committed separately by publish_state.
+if [ -z "$CLAUDE_FAILED" ] && [ -n "$(git status --porcelain -- . ':!logs' ':!memory/state')" ]; then
   log "Claude left uncommitted changes. Committing..."
-  git add -A
+  git add -A -- . ':!logs'
   git commit -m "fix(phase-$PHASE): dev loop auto-commit $DATE" >> "$LOG_FILE" 2>&1 || true
+elif [ -n "$CLAUDE_FAILED" ]; then
+  log "Skipping fix(...) auto-commit: Claude run failed ($CLAUDE_FAILED)"
 fi
 
 # Step 5: Push if there are new commits

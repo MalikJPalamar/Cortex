@@ -118,7 +118,7 @@ jobs:
             } catch (e) {}
 
             const devloopLine = devloop
-              ? `${devloop.status === 'error' ? '❌ ' : ''}${devloop.status} (Phase ${devloop.phase}, ${devloop.tests_remaining} tests remaining, ` +
+              ? `${devloop.status === 'error' ? '❌ ' : ''}${devloop.status}${devloop.error_reason ? ` (${devloop.error_reason})` : ''} (Phase ${devloop.phase}, ${devloop.tests_remaining} tests remaining, ` +
                 `claude exit ${devloop.claude_exit ?? 'n/a'}, ${devloop.consecutive_zero_fix_runs ?? 0} zero-fix runs in a row) — ${devloop.timestamp}`
               : 'No dev-loop-status.json snapshot.';
 

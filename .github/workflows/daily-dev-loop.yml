@@ -91,7 +91,7 @@ jobs:
             const dlError = !dl || dl.status === 'error' || dlZero >= 3;
             const dlBadge = dlError ? '❌' : (dlStale ? '⚠️' : '✅');
             const dlHeadline = !dl ? 'no dev-loop-status.json snapshot found'
-              : dlError ? (dl.status === 'error' ? `last VPS1 run FAILED (status=error)` : `${dlZero} consecutive runs with zero fixes — loop is spinning`)
+              : dlError ? (dl.status === 'error' ? `last VPS1 run FAILED (${dl.error_reason || 'error'})${dl.error_reason === 'auth_expired' ? ' — run `claude setup-token` and put CLAUDE_CODE_OAUTH_TOKEN in /root/.config/centaurion/env on VPS1 (see deploy/vps1/README.md)' : ''}` : `${dlZero} consecutive runs with zero fixes — loop is spinning`)
               : dlStale ? `status snapshot is ${Math.round(dlAgeH)}h old (> 36h) — cron may not be running`
               : `last run ${dl.status}`;
             const dlTail = dl && dl.claude_stderr_tail ? String(dl.claude_stderr_tail).trim() : '';
@@ -101,7 +101,8 @@ jobs:
               '',
               '| Field | Value |',
               '|-------|-------|',
-              `| Status | \`${dl ? dl.status : 'n/a'}\` |`,
+              `| Status | \`${dl ? dl.status : 'n/a'}\`${dl && dl.error_reason ? ` (${dl.error_reason})` : ''} |`,
+              `| Auth source | ${dl ? (dl.auth_source || 'n/a') : 'n/a'} |`,
               `| Last run | ${dl ? dl.timestamp : 'n/a'}${dlStale && dl ? ` ⚠️ (${Math.round(dlAgeH)}h ago)` : ''} |`,
               `| Tests fixed / remaining | ${dl ? `${dl.tests_fixed} / ${dl.tests_remaining}` : 'n/a'} |`,
               `| claude exit code | ${dl && dl.claude_exit !== undefined ? dl.claude_exit : 'n/a'} |`,
