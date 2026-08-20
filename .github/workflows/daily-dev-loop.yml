@@ -78,7 +78,39 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
             const date = new Date().toISOString().split('T')[0];
+
+            // --- VPS1 dev-loop status snapshot (committed by centaurion-dev-loop.sh) ---
+            let dl = null;
+            try { dl = JSON.parse(fs.readFileSync('memory/state/dev-loop-status.json', 'utf8')); } catch (e) {}
+            const dlTs = dl && dl.timestamp ? new Date(dl.timestamp).getTime() : 0;
+            const dlAgeH = dlTs ? (Date.now() - dlTs) / 3600000 : Infinity;
+            const dlStale = dlAgeH > 36;
+            const dlZero = dl ? parseInt(dl.consecutive_zero_fix_runs ?? 0) : 0;
+            const dlError = !dl || dl.status === 'error' || dlZero >= 3;
+            const dlBadge = dlError ? '❌' : (dlStale ? '⚠️' : '✅');
+            const dlHeadline = !dl ? 'no dev-loop-status.json snapshot found'
+              : dlError ? (dl.status === 'error' ? `last VPS1 run FAILED (status=error)` : `${dlZero} consecutive runs with zero fixes — loop is spinning`)
+              : dlStale ? `status snapshot is ${Math.round(dlAgeH)}h old (> 36h) — cron may not be running`
+              : `last run ${dl.status}`;
+            const dlTail = dl && dl.claude_stderr_tail ? String(dl.claude_stderr_tail).trim() : '';
+            const dlSection = [
+              `### VPS1 Dev Loop ${dlBadge}`,
+              `**${dlHeadline}**`,
+              '',
+              '| Field | Value |',
+              '|-------|-------|',
+              `| Status | \`${dl ? dl.status : 'n/a'}\` |`,
+              `| Last run | ${dl ? dl.timestamp : 'n/a'}${dlStale && dl ? ` ⚠️ (${Math.round(dlAgeH)}h ago)` : ''} |`,
+              `| Tests fixed / remaining | ${dl ? `${dl.tests_fixed} / ${dl.tests_remaining}` : 'n/a'} |`,
+              `| claude exit code | ${dl && dl.claude_exit !== undefined ? dl.claude_exit : 'n/a'} |`,
+              `| claude elapsed | ${dl && dl.claude_elapsed_seconds !== undefined ? dl.claude_elapsed_seconds + 's' : 'n/a'} (total ${dl ? dl.elapsed_seconds : '?'}s) |`,
+              `| Consecutive zero-fix runs | ${dl ? dlZero : 'n/a'}${dlZero >= 3 ? ' ❌' : ''} |`,
+              '',
+              dlTail ? ['<details><summary>claude output tail (last 30 lines)</summary>', '', '```', dlTail, '```', '</details>'].join('\n') : '_no claude output captured_',
+            ].join('\n');
+
             const phase = '${{ steps.priority.outputs.phase }}';
             const phaseName = '${{ steps.priority.outputs.phase_name }}';
             const status = '${{ steps.priority.outputs.status }}';
@@ -99,12 +131,15 @@ jobs:
             const tddRed = `${{ steps.priority.outputs.tdd_red }}`;
             const tddGreen = `${{ steps.priority.outputs.tdd_green }}`;
 
-            const title = `[dev-loop] ${date} — Phase ${phase}: ${phaseName}`;
+            const titleBadge = dlError ? '❌ ' : (dlStale ? '⚠️ ' : '');
+            const title = `${titleBadge}[dev-loop] ${date} — Phase ${phase}: ${phaseName}`;
 
             const body = [
-              `## Daily Development Report — ${date}`,
+              `## ${dlBadge} Daily Development Report — ${date}`,
               '',
-              '### Test Suite Status',
+              dlSection,
+              '',
+              '### Test Suite Status (GitHub runner)',
               '| Phase | Pass | Fail | Status |',
               '|-------|------|------|--------|',
               `| Phase 1: Core Loop | ${p1Pass} | ${p1Fail} | ${parseInt(p1Fail||0) === 0 ? '✅' : '❌'} |`,
@@ -140,7 +175,7 @@ jobs:
               state: 'open'
             });
             for (const issue of existing.data) {
-              if (issue.title.startsWith('[dev-loop]') && issue.title !== title) {
+              if (issue.title.includes('[dev-loop]') && issue.title !== title) {
                 await github.rest.issues.update({
                   owner: context.repo.owner,
                   repo: context.repo.repo,

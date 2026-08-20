@@ -69,12 +69,22 @@ jobs:
 
             let systemRows = '| _no health-status.json snapshot found_ | ❔ | |';
             let snapshotNote = '';
+            let healthStale = false;
+            let healthAgeH = Infinity;
             if (health) {
-              snapshotNote = `_Live-host rows reflect the last VPS snapshot (${health.timestamp})._`;
+              const ts = health.timestamp ? new Date(health.timestamp).getTime() : 0;
+              healthAgeH = ts ? (Date.now() - ts) / 3600000 : Infinity;
+              healthStale = healthAgeH > 48;
+              snapshotNote = healthStale
+                ? `⚠️ **STALE SNAPSHOT** — last VPS health snapshot is ${Math.round(healthAgeH / 24)} days old (${health.timestamp}). ` +
+                  'The rows above describe the host as it was then, not now. ' +
+                  'health-check.sh runs at the end of every dev-loop run; if this stays stale the VPS1 cron is not running or not pushing.'
+                : `_Live-host rows reflect the last VPS snapshot (${health.timestamp}, ${Math.round(healthAgeH)}h ago)._`;
               const sys = health.system || {};
               const svc = health.services || {};
               systemRows = [
-                `| Overall | ${emoji(health.overall)} | ${health.overall || 'unknown'} |`,
+                `| Snapshot age | ${healthStale ? '⚠️' : '✅'} | ${Math.round(healthAgeH)}h${healthStale ? ' — stale (> 48h)' : ''} |`,
+                `| Overall | ${healthStale ? '⚠️' : emoji(health.overall)} | ${health.overall || 'unknown'}${healthStale ? ' (stale)' : ''} |`,
                 `| Disk | ${emoji(sys.disk_status)} | ${sys.disk_percent ?? '?'}% |`,
                 `| Memory | ${emoji(sys.memory_status)} | ${sys.memory_percent ?? '?'}% |`,
                 `| Docker | ${emoji(svc.docker_status)} | ${svc.docker_running ?? '?'} containers |`,
@@ -108,12 +118,13 @@ jobs:
             } catch (e) {}
 
             const devloopLine = devloop
-              ? `${devloop.status} (Phase ${devloop.phase}, ${devloop.tests_remaining} tests remaining) — ${devloop.timestamp}`
+              ? `${devloop.status === 'error' ? '❌ ' : ''}${devloop.status} (Phase ${devloop.phase}, ${devloop.tests_remaining} tests remaining, ` +
+                `claude exit ${devloop.claude_exit ?? 'n/a'}, ${devloop.consecutive_zero_fix_runs ?? 0} zero-fix runs in a row) — ${devloop.timestamp}`
               : 'No dev-loop-status.json snapshot.';
 
-            const title = `[centaurion-health] ${date}`;
+            const title = `${healthStale ? '⚠️ ' : ''}[centaurion-health] ${date}`;
             const body = [
-              `## Daily Health — ${date}`,
+              `## Daily Health — ${date}${healthStale ? ' ⚠️ (VPS snapshot stale)' : ''}`,
               '',
               '### Framework Suite (fresh)',
               `${suiteStatus} **${suitePass} passed, ${suiteFail} failed** (CI scope — Phase 7/VPS excluded)`,
@@ -148,7 +159,7 @@ jobs:
               state: 'open',
             });
             for (const issue of existing.data) {
-              if (issue.title.startsWith('[centaurion-health]') && issue.title !== title) {
+              if (issue.title.includes('[centaurion-health]') && issue.title !== title) {
                 await github.rest.issues.update({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
