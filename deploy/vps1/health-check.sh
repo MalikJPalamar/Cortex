@@ -9,8 +9,9 @@
 # Run manually:
 #   bash deploy/vps1/health-check.sh
 #
-# Add to daily cron (runs before dev loop):
-#   55 3 * * * cd ~/Centaurion && CENTAURION_REPO=~/Centaurion bash deploy/vps1/health-check.sh >> ~/Centaurion/logs/cron.log 2>&1
+# No separate cron entry needed: centaurion-dev-loop.sh calls this script at the
+# end of every run (3x daily) and commits memory/state/health-status.json along
+# with dev-loop-status.json. Failures here never fail the dev loop.
 #
 # ═══════════════════════════════════════════════════════════
 
@@ -37,7 +38,10 @@ if [ "${MEM_PCT:-0}" -ge 90 ]; then MEM_STATUS="critical";
 elif [ "${MEM_PCT:-0}" -ge 80 ]; then MEM_STATUS="warning"; fi
 
 # Docker status
-DOCKER_RUNNING=$(docker ps --format '{{.Names}}' 2>/dev/null | wc -l || echo "0")
+# NB: no "|| echo 0" after wc — wc always prints a count, and with pipefail the
+# fallback would append a second "0" and corrupt the JSON when docker is absent.
+DOCKER_RUNNING=$(docker ps --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')
+DOCKER_RUNNING=${DOCKER_RUNNING:-0}
 DOCKER_STATUS="ok"
 if ! command -v docker &>/dev/null; then DOCKER_STATUS="not_installed";
 elif [ "$DOCKER_RUNNING" -eq 0 ]; then DOCKER_STATUS="no_containers"; fi
@@ -59,7 +63,8 @@ GIT_CLEAN="false"
 if [ -z "$(git -C "$REPO_DIR" status --porcelain 2>/dev/null)" ]; then
   GIT_CLEAN="true"
 fi
-COMMITS_AHEAD=$(git -C "$REPO_DIR" log origin/main..HEAD --oneline 2>/dev/null | wc -l || echo "0")
+COMMITS_AHEAD=$(git -C "$REPO_DIR" log origin/main..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
+COMMITS_AHEAD=${COMMITS_AHEAD:-0}
 
 # Dev loop last run
 LAST_LOG=$(find "$REPO_DIR/logs" -name "dev-loop-*.log" -type f 2>/dev/null | sort | tail -1)

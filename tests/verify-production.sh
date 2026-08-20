@@ -37,7 +37,9 @@ fi
 # R31.2: Cron job is installed and pointing to correct path
 if crontab -l 2>/dev/null | grep -q "centaurion-dev-loop"; then
   CRON_PATH=$(crontab -l | grep "centaurion-dev-loop" | head -1)
-  if echo "$CRON_PATH" | grep -q "/root/Centaurion\|CENTAURION_REPO"; then
+  # Repo was renamed Centaurion -> Cortex; accept either checkout path or an
+  # explicit CENTAURION_REPO= in the cron line.
+  if echo "$CRON_PATH" | grep -qE "/root/(Centaurion|Cortex)|\\\$HOME/(Centaurion|Cortex)|CENTAURION_REPO"; then
     pass "R31.2: Dev loop cron installed with correct path"
   else
     fail "R31.2: Cron installed but path may be wrong"

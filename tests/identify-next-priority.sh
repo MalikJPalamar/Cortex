@@ -32,6 +32,9 @@ PHASE_SCRIPTS=(
   "tests/verify-hermes-integration.sh"
 )
 
+# Check IDs that validate host configuration rather than repo content.
+HOST_TEST_PATTERN="${CENTAURION_HOST_TEST_PATTERN:-R31\.[0-9]+}"
+
 # --- Run all phases and collect results ---
 declare -a PASSES FAILS TOTALS OUTPUTS
 OVERALL_PASS=0
@@ -43,6 +46,13 @@ for i in "${!PHASE_SCRIPTS[@]}"; do
     OUTPUT=$(bash "$SCRIPT" 2>&1) || true
   else
     OUTPUT=""
+  fi
+  # Host-config checks (Phase 7 R31.x: crontab, claude auth, push rights, recent
+  # log) can only be fixed on the VPS host, never from inside the repo. When the
+  # dev loop itself is the caller it sets CENTAURION_SKIP_HOST_TESTS=1 so those
+  # failures are not handed to Claude as "the next priority".
+  if [ "${CENTAURION_SKIP_HOST_TESTS:-0}" = "1" ]; then
+    OUTPUT=$(echo "$OUTPUT" | grep -vE "^  ✗ ${HOST_TEST_PATTERN}")
   fi
   # Count genuine per-check result lines only. Each phase script prints a
   # summary footer that ALSO begins with the ✓/✗ glyph, e.g.
@@ -92,6 +102,7 @@ for i in "${!PHASE_NAMES[@]}"; do
   "test_file": "${PHASE_SCRIPTS[$i]}",
 $PHASE_STATS
   "overall": {"pass": $OVERALL_PASS, "fail": $OVERALL_FAIL, "total": $OVERALL_TOTAL},
+  "host_tests_skipped": $([ "${CENTAURION_SKIP_HOST_TESTS:-0}" = "1" ] && echo true || echo false),
   "tdd_plan": {
     "red": "Phase $NUM test failing: $FIRST_FAIL",
     "green": "Implement the feature to make this test pass",
@@ -116,6 +127,7 @@ if [ "$FOUND" = false ]; then
   "test_file": null,
 $PHASE_STATS
   "overall": {"pass": $OVERALL_PASS, "fail": $OVERALL_FAIL, "total": $OVERALL_TOTAL},
+  "host_tests_skipped": $([ "${CENTAURION_SKIP_HOST_TESTS:-0}" = "1" ] && echo true || echo false),
   "tdd_plan": {
     "red": "Write Phase $NEXT verification tests",
     "green": "Implement Phase $NEXT requirements",

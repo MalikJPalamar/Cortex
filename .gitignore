@@ -62,3 +62,6 @@ identity/BASELINE-*.md
 memory/state/baseline-*-in-progress.md
 memory/state/baseline-*-results.md
 memory/state/onboarding-state.json
+
+# VPS runtime logs and lock file (never commit)
+logs/
