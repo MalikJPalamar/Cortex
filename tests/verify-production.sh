@@ -22,8 +22,20 @@ echo "═══ R31: VPS1 Services ═══"
 
 # R31.1: Claude Code is authenticated (not using a raw API key)
 if command -v claude &>/dev/null; then
+  # Headless hosts authenticate via CLAUDE_CODE_OAUTH_TOKEN (see deploy/vps1/README.md);
+  # `claude auth status` reports "none" in that mode, so check the env/env-file first.
+  ENV_FILE="${CENTAURION_ENV_FILE:-/root/.config/centaurion/env}"
+  if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ -r "$ENV_FILE" ] && grep -q '^CLAUDE_CODE_OAUTH_TOKEN=sk-ant-' "$ENV_FILE"; then
+    TOKEN_SOURCE="env file $ENV_FILE"
+  elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+    TOKEN_SOURCE="environment"
+  else
+    TOKEN_SOURCE=""
+  fi
   AUTH_METHOD=$(claude auth status 2>/dev/null | grep -o '"authMethod": *"[^"]*"' | sed 's/.*"authMethod": *"//;s/"//' || echo "unknown")
-  if [ "$AUTH_METHOD" = "claude.ai" ] || [ "$AUTH_METHOD" = "oauth_token" ]; then
+  if [ -n "$TOKEN_SOURCE" ]; then
+    pass "R31.1: Claude Code authenticated via OAuth token ($TOKEN_SOURCE)"
+  elif [ "$AUTH_METHOD" = "claude.ai" ] || [ "$AUTH_METHOD" = "oauth_token" ]; then
     pass "R31.1: Claude Code authenticated via subscription ($AUTH_METHOD)"
   elif [ "$AUTH_METHOD" = "none" ]; then
     fail "R31.1: Claude Code not authenticated"
