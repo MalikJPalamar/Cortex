@@ -33,7 +33,7 @@ PHASE_SCRIPTS=(
 )
 
 # Check IDs that validate host configuration rather than repo content.
-HOST_TEST_PATTERN="${CENTAURION_HOST_TEST_PATTERN:-R31\.[0-9]+}"
+HOST_TEST_PATTERN="${CENTAURION_HOST_TEST_PATTERN:-R3[12]\.[0-9]+}"
 
 # --- Run all phases and collect results ---
 declare -a PASSES FAILS TOTALS OUTPUTS
@@ -47,7 +47,8 @@ for i in "${!PHASE_SCRIPTS[@]}"; do
   else
     OUTPUT=""
   fi
-  # Host-config checks (Phase 7 R31.x: crontab, claude auth, push rights, recent
+  # Host-config checks (Phase 7 R31.x: crontab, claude auth, push rights, recent;
+  # R32.x: docker images / systemd services on the host)
   # log) can only be fixed on the VPS host, never from inside the repo. When the
   # dev loop itself is the caller it sets CENTAURION_SKIP_HOST_TESTS=1 so those
   # failures are not handed to Claude as "the next priority".
