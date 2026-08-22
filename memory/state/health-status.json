@@ -1,15 +1,15 @@
 {
-  "timestamp": "2026-08-22T12:00:09Z",
+  "timestamp": "2026-08-22T20:00:07Z",
   "overall": "healthy",
   "system": {
-    "disk_percent": 67,
+    "disk_percent": 68,
     "disk_status": "ok",
     "memory_percent": 28,
     "memory_status": "ok",
-    "uptime": "up 9 weeks, 5 days, 6 hours, 28 minutes"
+    "uptime": "up 9 weeks, 5 days, 14 hours, 27 minutes"
   },
   "services": {
-    "docker_running": 6,
+    "docker_running": 7,
     "docker_status": "ok",
     "nanoclaw_up": false,
     "claude_auth": "oauth_token"
