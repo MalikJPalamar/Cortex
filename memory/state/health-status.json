@@ -1,15 +1,15 @@
 {
-  "timestamp": "2026-11-02T20:00:12Z",
+  "timestamp": "2026-11-03T04:00:13Z",
   "overall": "healthy",
   "system": {
     "disk_percent": 74,
     "disk_status": "ok",
-    "memory_percent": 34,
+    "memory_percent": 37,
     "memory_status": "ok",
-    "uptime": "up 2 weeks, 2 days, 9 hours, 0 minutes"
+    "uptime": "up 2 weeks, 2 days, 17 hours, 0 minutes"
   },
   "services": {
-    "docker_running": 6,
+    "docker_running": 7,
     "docker_status": "ok",
     "nanoclaw_up": false,
     "claude_auth": "oauth_token"
@@ -17,7 +17,7 @@
   "repo": {
     "git_clean": false,
     "commits_ahead": 0,
-    "last_dev_loop": "2026-11-02",
-    "last_dev_loop_ok": true
+    "last_dev_loop": "2026-11-03",
+    "last_dev_loop_ok": false
   }
 }
