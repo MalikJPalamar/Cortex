@@ -1,12 +1,12 @@
 {
-  "timestamp": "2026-11-13T20:00:15Z",
+  "timestamp": "2026-11-14T04:00:15Z",
   "overall": "healthy",
   "system": {
     "disk_percent": 76,
     "disk_status": "ok",
     "memory_percent": 32,
     "memory_status": "ok",
-    "uptime": "up 3 weeks, 6 days, 9 hours, 0 minutes"
+    "uptime": "up 3 weeks, 6 days, 17 hours, 0 minutes"
   },
   "services": {
     "docker_running": 9,
@@ -17,7 +17,7 @@
   "repo": {
     "git_clean": false,
     "commits_ahead": 0,
-    "last_dev_loop": "2026-11-13",
-    "last_dev_loop_ok": true
+    "last_dev_loop": "2026-11-14",
+    "last_dev_loop_ok": false
   }
 }
